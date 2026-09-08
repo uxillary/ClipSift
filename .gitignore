@@ -1,0 +1,29 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Private footage and generated review outputs
+sample_data/*
+!sample_data/.gitkeep
+clipsift_output/
+ClipSift Results/
+flagged_clips/
+needs_review/
+evidence_frames/
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Model caches, credentials and local environment
+.cache/
+models/
+hf_cache/
+.env
+*.pem
+*.key
