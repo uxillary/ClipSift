@@ -1,0 +1,23 @@
+
+cd C:\Users\trigg\Documents\GitHub\clipsift
+py -0p
+python --version
+nvidia-smi
+py -3.11 --version
+py -3.11 -m venv .venv
+
+.\.venv\Scripts\Activate.ps1
+
+If PowerShell blocks activation, allow it for this window only:
+
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements.txt
+
+Verify PyTorch and CUDA
+
+Run:
+
+python -c "import torch; print('PyTorch:', torch.__version__); print('CUDA available:', torch.cuda.is_available()); print('PyTorch CUDA:', torch.version.cuda); print('Device:', torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
