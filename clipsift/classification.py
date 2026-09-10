@@ -67,11 +67,20 @@ def parse_model_response(raw_response: str, timestamp_seconds: float) -> FrameAs
 
     try:
         data = json.loads(_extract_json_object(raw_response))
+        if not isinstance(data.get("person_visible"), bool):
+            raise TypeError("person_visible must be a JSON boolean")
+        if not isinstance(data.get("review_required"), bool):
+            raise TypeError("review_required must be a JSON boolean")
+        confidence = data.get("confidence")
+        if not isinstance(confidence, str) or confidence.lower() not in CONFIDENCE_SCORES:
+            raise ValueError("confidence must be low, medium, or high")
+        if not isinstance(data.get("description"), str):
+            raise TypeError("description must be a string")
         return FrameAssessment(
-            person_visible=bool(data["person_visible"]),
-            confidence=str(data.get("confidence", "low")).lower(),
-            description=str(data.get("description", "")).strip(),
-            review_required=bool(data.get("review_required", False)),
+            person_visible=data["person_visible"],
+            confidence=confidence.lower(),
+            description=data["description"].strip(),
+            review_required=data["review_required"],
             timestamp_seconds=timestamp_seconds,
             raw_response=raw_response,
         )

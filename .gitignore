@@ -1,5 +1,6 @@
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -10,6 +11,7 @@ env/
 # Private footage and generated review outputs
 sample_data/*
 !sample_data/.gitkeep
+local_test_data/
 clipsift_output/
 ClipSift Results/
 flagged_clips/
@@ -24,6 +26,12 @@ evidence_frames/
 .cache/
 models/
 hf_cache/
+.huggingface/
+.hf_home/
 .env
+*.safetensors
+*.bin
+*.gguf
+token*
 *.pem
 *.key

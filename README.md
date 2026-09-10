@@ -1,101 +1,65 @@
 # ClipSift
 
-ClipSift is a privacy-conscious CCTV review assistant built for the Google Cloud and NVIDIA GTC Berlin Golden Ticket competition. It scans a local folder of short CCTV clips, samples representative frames, and asks an open Gemma 3 vision model whether a person is likely visible.
+ClipSift is a privacy-conscious local CCTV review assistant. It asks Gemma 3 whether an image is likely to contain a person and flags results for human review. It is not proof, does not identify people, and never uploads media.
 
-This MVP is a local command-line prototype. It is an automated review aid, not proof of a person's presence, and it does not perform facial recognition or identity matching.
+## Windows setup
 
-## How It Works
-
-ClipSift uses OpenCV to stream each `.mp4`, `.avi`, `.mov` or `.mkv` file without loading the whole video into memory. By default it samples one frame per second, resizes each sampled frame while preserving aspect ratio, and sends the frame to a Gemma 3 vision-capable model through Hugging Face Transformers.
-
-Google's Gemma model provides the visual assessment. NVIDIA GPUs accelerate inference locally when PyTorch detects CUDA. The planned cloud benchmark will compare CPU, a local RTX 3070 Ti, and a Google Cloud instance with an NVIDIA L4 GPU using the same controlled test set.
-
-## Privacy And Safety
-
-- Original videos are never moved, deleted or modified.
-- Flagged clips are copied into the output folder.
-- Evidence frames are generated only from sampled frames.
-- Private footage, model caches, credentials and generated outputs are excluded from Git.
-- Results may be wrong because of darkness, glare, rain, reflections, compression, partial obstruction or model error.
-- Cloud testing should use only synthetic, public-domain or explicitly consented footage.
-
-## Install On Windows With NVIDIA GPU
-
-Use Python 3.11.
+Use Python 3.11 and install the CUDA-enabled PyTorch build separately so it matches your NVIDIA driver. Get the current command from the [official PyTorch selector](https://pytorch.org/get-started/locally/); do not rely on the generic dependency install to replace a working CUDA build.
 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+# Run the CUDA command supplied by pytorch.org here.
+python -m pip install -r requirements.txt
+python -m pip install -e .
 ```
 
-For CUDA acceleration, install a PyTorch build compatible with your NVIDIA driver and CUDA runtime. Check the current command from the official PyTorch install selector, then verify:
+Accept the `google/gemma-3-4b-it` licence on Hugging Face, then authenticate locally. ClipSift checks only whether authentication is available and never displays the token.
 
 ```powershell
-python -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU')"
+hf auth login
+python -m clipsift.cli doctor
 ```
 
-## CPU Fallback
+The first inference may download several gigabytes of model files. Hugging Face model access, network access, free disk space, and compatible Transformers/BitsAndBytes versions are required.
 
-If CUDA is unavailable, ClipSift reports that CPU inference is being used. CPU inference is expected to be much slower and may be impractical for larger Gemma checkpoints.
+## Single-image smoke test
 
-## Run ClipSift
+JPEG and PNG are supported. The image stays on the computer.
 
 ```powershell
+python -m clipsift.cli test-image local_test_data/person.jpg --device auto --preset safe
+# Equivalent installed command:
+clipsift test-image local_test_data/person.jpg --device auto --preset safe
+```
+
+`auto` selects CUDA device 0 when PyTorch reports CUDA, otherwise CPU. Use `--device cuda`, `--device cuda:1`, or `--device cpu` to make an explicit choice. Device indices are validated before model loading; CUDA errors never cause a silent CPU fallback. This makes the same command portable between desktop and laptop GPUs without hard-coded GPU names.
+
+The default `safe` CUDA preset loads Gemma directly in 4-bit NF4 with double quantisation and BF16 compute when supported (otherwise FP16). It is intended for the 6GB laptop GPU. `balanced` uses unquantised BF16/FP16 and refuses CUDA devices with less than 12 GiB VRAM. CPU uses FP32 and is likely to be very slow and memory-heavy.
+
+Common failures are explicit: accept/request checkpoint access and run `hf auth login` for access errors; update compatible public packages for import/API errors; close GPU applications and use `safe` for CUDA-memory errors. `doctor` is diagnostic only and its preset recommendation does not claim inference was tested.
+
+## Video scan
+
+The original invocation remains accepted; `scan` is the explicit form:
+
+```powershell
+clipsift scan C:\path\to\clips --output "ClipSift Results" --device auto --preset safe
 python -m clipsift.cli C:\path\to\clips --output "ClipSift Results"
 ```
 
-Change the sampling rate:
+Original recordings are not modified. Generated review folders, evidence, private media, credentials, model caches, and weights are excluded from Git.
 
-```powershell
-python -m clipsift.cli C:\path\to\clips --samples-per-second 0.5 --max-frame-size 768
-```
+## Tests
 
-Use a specific Hugging Face model:
-
-```powershell
-python -m clipsift.cli C:\path\to\clips --model-name google/gemma-3-4b-it
-```
-
-Output structure:
-
-```text
-ClipSift Results/
-├── flagged_clips/
-├── needs_review/
-├── evidence_frames/
-├── report.csv
-└── benchmark.json
-```
-
-## Run Tests
+Tests are offline and mock model/CUDA boundaries; they do not download Gemma or read private media.
 
 ```powershell
 python -m pytest
+pytest
+python -m clipsift.cli --help
+python -m clipsift.cli doctor
 ```
 
-The current tests cover model-response parsing, clip classification and report generation. They do not download or run a Gemma model.
-
-## Benchmark Plan
-
-No benchmark results are included until measured. The planned comparison is:
-
-1. CPU baseline
-2. Local NVIDIA RTX 3070 Ti
-3. Google Cloud NVIDIA L4
-
-Each run should record the device, model name, videos processed, video minutes processed, frames analysed, total time, average inference time and approximate frames per second.
-
-## Current MVP Limitations
-
-- Requires access to a compatible Gemma 3 vision checkpoint on Hugging Face.
-- The exact model memory requirements must be validated on the target GPU.
-- Video decoding and evidence saving are implemented, but need manual testing with safe sample footage.
-- Classification thresholds are intentionally conservative and should be tuned against a labelled test set.
-- No desktop GUI, EXE packaging, cloud deployment, live camera feed or facial recognition is included.
-
-## TODO
-
-- Google Cloud NVIDIA L4 deployment: document instance type, driver setup, model cache handling, test data handling and measured benchmark results.
-- Future Windows GUI: add folder picker, progress view, result queue and evidence preview after the CLI workflow is validated.
+No performance or accuracy benchmark is claimed until it has been measured on a controlled test set.

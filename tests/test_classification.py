@@ -21,6 +21,24 @@ def test_parse_malformed_response_returns_review_assessment() -> None:
     assert assessment.parse_error is not None
 
 
+def test_parse_realistic_fenced_gemma_response_safely() -> None:
+    assessment = parse_model_response(
+        'Here is the result:\n```json\n{"person_visible": false, "confidence": "medium", "description": "No clear person; a reflection is present.", "review_required": true}\n```',
+        timestamp_seconds=1.5,
+    )
+    assert assessment.person_visible is False
+    assert assessment.review_required is True
+    assert assessment.parse_error is None
+
+
+def test_string_boolean_is_rejected() -> None:
+    assessment = parse_model_response(
+        '{"person_visible": "false", "confidence": "high", "description": "Empty", "review_required": false}', 0.0
+    )
+    assert assessment.review_required is True
+    assert assessment.parse_error is not None
+
+
 def test_decide_clip_person_detected_from_high_confidence_frame() -> None:
     assessment = parse_model_response(
         '{"person_visible": true, "confidence": "high", "description": "Likely person visible.", "review_required": true}',

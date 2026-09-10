@@ -7,7 +7,8 @@
 - **Submission deadline:** 10 September 2026
 - **Owner:** Adam Johnston
 - **Primary development platform:** Windows 11
-- **Local hardware:** NVIDIA GeForce RTX 3070 Ti
+- **Primary desktop GPU:** NVIDIA GeForce RTX 3070 Ti
+- **Additional development hardware:** Windows laptops with differing NVIDIA GPUs and VRAM capacities
 
 ## One-sentence summary
 
@@ -79,8 +80,9 @@ The final implementation must use an exact Gemma checkpoint that genuinely suppo
 
 ### NVIDIA
 
-- Run local inference using Adam's RTX 3070 Ti where practical.
-- Detect CUDA support automatically.
+- Run local inference using Adam's primary desktop RTX 3070 Ti where practical.
+- Detect devices at runtime across desktop and laptop development computers; no GPU model is hard-coded.
+- Use the memory-conscious `safe` preset for lower-VRAM hardware, including 4-bit CUDA inference.
 - Provide a CPU fallback with an honest warning that it may be slower.
 - Record the actual GPU name and runtime details in benchmark output.
 - A later optimisation experiment may use NVIDIA TensorRT, but this must not be presented as implemented until tested.
