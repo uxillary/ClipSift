@@ -1,4 +1,4 @@
-# ClipSift
+# Clip Sift
 
 ClipSift is a privacy-conscious local CCTV review assistant. It asks Gemma 3 whether an image is likely to contain a person and flags results for human review. It is not proof, does not identify people, and never uploads media.
 
