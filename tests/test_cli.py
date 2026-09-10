@@ -29,3 +29,12 @@ def test_clear_cuda_oom_error(monkeypatch, tmp_path: Path, capsys) -> None:
     monkeypatch.setattr(cli, "GemmaVisionModel", fail)
     assert cli.main(["test-image", str(_image(tmp_path))]) == 2
     assert "did not fall back to CPU" in capsys.readouterr().err
+
+
+def test_debug_prints_traceback_for_unexpected_error(monkeypatch, tmp_path: Path, capsys) -> None:
+    def fail(*args): raise RuntimeError("unexpected test failure")
+    monkeypatch.setattr(cli, "GemmaVisionModel", fail)
+    assert cli.main(["test-image", str(_image(tmp_path)), "--debug"]) == 2
+    captured = capsys.readouterr()
+    assert "Traceback (most recent call last)" in captured.err
+    assert "RuntimeError: unexpected test failure" in captured.err

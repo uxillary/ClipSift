@@ -1,7 +1,7 @@
 """Command-line entry point for ClipSift."""
 from __future__ import annotations
 
-import argparse, json, shutil, sys, time
+import argparse, json, shutil, sys, time, traceback
 from pathlib import Path
 import cv2
 from PIL import Image, UnidentifiedImageError
@@ -31,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
     image = commands.add_parser("test-image", help="Test one local JPEG or PNG")
     image.add_argument("image_path", type=Path)
     image.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
+    image.add_argument("--debug", action="store_true", help="Show a traceback for unexpected errors")
     _device_options(image)
     return parser
 
@@ -76,7 +77,11 @@ def run_test_image(args: argparse.Namespace) -> int:
     except (DeviceSelectionError, ModelLoadError, CudaOutOfMemoryError, ValueError) as exc:
         print(f"ClipSift inference failed: {exc}", file=sys.stderr); return 2
     except Exception as exc:
-        print(f"ClipSift inference failed: {type(exc).__name__}: {exc}", file=sys.stderr); return 2
+        if args.debug:
+            traceback.print_exc()
+        else:
+            print(f"ClipSift inference failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
     finally:
         if model: model.close()
 

@@ -9,6 +9,7 @@ from typing import Any
 
 import cv2
 import numpy as np
+import torch
 from PIL import Image
 
 from clipsift.device import DeviceInfo, select_device
@@ -52,7 +53,6 @@ class GemmaVisionModel:
         self.device_info = select_device(device)
         self.preset = preset
 
-        import torch
         from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
         dtype = getattr(torch, self.device_info.torch_dtype)
@@ -116,7 +116,7 @@ class GemmaVisionModel:
             if self.device_info.device_type == "cuda":
                 torch.cuda.synchronize(self.device_info.device_index)
             elapsed = time.perf_counter() - start
-        except __import__("torch").cuda.OutOfMemoryError as exc:
+        except torch.cuda.OutOfMemoryError as exc:
             raise CudaOutOfMemoryError("CUDA ran out of memory during inference. Close GPU applications or reduce image size, then retry with --preset safe; ClipSift did not fall back to CPU.") from exc
 
         input_token_count = inputs["input_ids"].shape[-1]
@@ -133,7 +133,6 @@ class GemmaVisionModel:
         if processor is not None:
             del self.processor
         if getattr(self, "device_info", None) and self.device_info.device_type == "cuda":
-            import torch
             torch.cuda.empty_cache()
 
 
