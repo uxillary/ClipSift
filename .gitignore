@@ -17,7 +17,10 @@ ClipSift Results/
 flagged_clips/
 needs_review/
 evidence_frames/
+
 *.mp4
+!for_content/*.mp4
+
 *.avi
 *.mov
 *.mkv
