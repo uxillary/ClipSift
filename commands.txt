@@ -48,3 +48,7 @@ hf auth whoami
 access?
 
 python -c "from huggingface_hub import model_info; info=model_info('google/gemma-3-4b-it'); print('Access confirmed:', info.id)"
+
+test 
+
+python -m clipsift.cli test-image local_test_data\person.png --device auto --preset safe
