@@ -34,6 +34,25 @@ python -m clipsift.cli test-image local_test_data/person.jpg --device auto --pre
 clipsift test-image local_test_data/person.jpg --device auto --preset safe
 ```
 
+Gemma supplies only a visual observation (`present`, `absent`, or `uncertain`), confidence in that complete assessment, and a neutral description. ClipSift—not the model—calculates the review decision: present, uncertain, parse failures, and all low-confidence assessments require review; absent observations with medium or high confidence do not. A model-generated legacy `review_required` value is ignored.
+
+Initial controlled image test on an RTX 3060 Laptop GPU using `google/gemma-3-4b-it` with the safe 4-bit NF4 preset:
+
+- Person image: correctly observed a person near a fence; 8.439 seconds; 3.15 GiB peak allocated GPU memory.
+- Empty image: correctly observed no person and described the car, fence and houses; 9.806 seconds; 3.15 GiB peak allocated GPU memory.
+
+These two observations are a smoke-test milestone, not a general accuracy benchmark.
+
+## Single-video smoke test
+
+This command samples at most three frames approximately two seconds apart by default. Gemma is loaded once and reused for every sampled frame. The source is read only and is never moved or uploaded.
+
+```powershell
+python -m clipsift.cli test-video local_test_data/person-short.mp4 --device auto --preset safe --max-frames 3
+```
+
+Use `--interval-seconds`, `--max-frames`, and `--debug` to adjust the controlled test. ClipSift stops early when a `present` observation has already guaranteed human review.
+
 `auto` selects CUDA device 0 when PyTorch reports CUDA, otherwise CPU. Use `--device cuda`, `--device cuda:1`, or `--device cpu` to make an explicit choice. Device indices are validated before model loading; CUDA errors never cause a silent CPU fallback. This makes the same command portable between desktop and laptop GPUs without hard-coded GPU names.
 
 The default `safe` CUDA preset loads Gemma directly in 4-bit NF4 with double quantisation and BF16 compute when supported (otherwise FP16). It is intended for the 6GB laptop GPU. `balanced` uses unquantised BF16/FP16 and refuses CUDA devices with less than 12 GiB VRAM. CPU uses FP32 and is likely to be very slow and memory-heavy.
@@ -62,4 +81,4 @@ python -m clipsift.cli --help
 python -m clipsift.cli doctor
 ```
 
-No performance or accuracy benchmark is claimed until it has been measured on a controlled test set.
+No general performance or accuracy benchmark is claimed until it has been measured on a larger controlled test set.

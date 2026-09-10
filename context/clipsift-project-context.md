@@ -64,17 +64,28 @@ ClipSift addresses these areas through a practical end-user problem, open-model 
 - A vision-capable **Gemma 3** model is the intended competition model.
 - Gemma must perform a meaningful visual-analysis task rather than being mentioned only for branding.
 - Model responses should be requested in a small structured format and validated before use.
+- Gemma provides visual observations only. ClipSift deterministically derives whether human review is required and ignores any model-generated review decision.
 
 Example internal response:
 
 ```json
 {
-  "person_visible": true,
-  "confidence": "high",
-  "description": "One person walking beside a parked vehicle",
-  "review_required": true
+  "person_status": "present",
+  "assessment_confidence": "high",
+  "description": "One person walking beside a parked vehicle"
 }
 ```
+
+The current preferred schema uses `person_status` (`present`, `absent`, or `uncertain`), `assessment_confidence`, and `description`. Present, uncertain, malformed, and low-confidence results require review; absent medium/high-confidence results do not.
+
+### Verified local inference milestone
+
+An initial controlled two-image smoke test completed on an RTX 3060 Laptop GPU using `google/gemma-3-4b-it` with BitsAndBytes 4-bit NF4:
+
+- Person image: person near a fence observed, 8.439 seconds, 3.15 GiB peak allocated GPU memory.
+- Empty image: no person observed, with car, fence and houses described, 9.806 seconds, 3.15 GiB peak allocated GPU memory.
+
+These are initial controlled smoke-test results, not a general accuracy benchmark. The single-video smoke-test command loads Gemma once and reuses it across up to three sampled frames by default.
 
 The final implementation must use an exact Gemma checkpoint that genuinely supports image input and fits the available environment. The README must record the exact model name, model licence and runtime configuration actually tested. Do not invent these details in advance.
 

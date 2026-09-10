@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse, json, shutil, sys, time, traceback
+from itertools import islice
 from pathlib import Path
 import cv2
 from PIL import Image, UnidentifiedImageError
@@ -33,10 +34,17 @@ def build_parser() -> argparse.ArgumentParser:
     image.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
     image.add_argument("--debug", action="store_true", help="Show a traceback for unexpected errors")
     _device_options(image)
+    video = commands.add_parser("test-video", help="Test up to a few sampled frames from one local video")
+    video.add_argument("video_path", type=Path)
+    video.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
+    video.add_argument("--max-frames", type=int, default=3)
+    video.add_argument("--interval-seconds", type=float, default=2.0)
+    video.add_argument("--debug", action="store_true", help="Show a traceback for unexpected errors")
+    _device_options(video)
     return parser
 
 def _normalise_args(argv: list[str]) -> list[str]:
-    if argv and argv[0] not in {"scan", "doctor", "test-image", "-h", "--help"}:
+    if argv and argv[0] not in {"scan", "doctor", "test-image", "test-video", "-h", "--help"}:
         return ["scan", *argv]
     return argv
 
@@ -67,7 +75,7 @@ def run_test_image(args: argparse.Namespace) -> int:
         result = model.analyse_frame(frame)
         assessment = parse_model_response(result.raw_response, 0.0)
         print("\nRaw model response:\n" + result.raw_response)
-        print("\nValidated ClipSift result (automated review aid; human review is required):")
+        print("\nValidated ClipSift result (automated review aid; review decision calculated by ClipSift):")
         print(json.dumps(assessment_to_dict(assessment), indent=2, ensure_ascii=False))
         print(f"\nActual device: {model.device_info.device} ({model.device_info.device_name})")
         print(f"Inference time: {result.inference_seconds:.3f} seconds")
@@ -84,6 +92,76 @@ def run_test_image(args: argparse.Namespace) -> int:
         return 2
     finally:
         if model: model.close()
+
+def _validate_video(path: Path, max_frames: int, interval_seconds: float) -> str | None:
+    if not path.is_file():
+        return f"Video does not exist or is not a file: {path}"
+    if path.suffix.lower() not in {".mp4", ".avi", ".mov", ".mkv"}:
+        return "Unsupported video format. ClipSift accepts MP4, AVI, MOV and MKV files."
+    if max_frames <= 0:
+        return "--max-frames must be greater than zero."
+    if interval_seconds <= 0:
+        return "--interval-seconds must be greater than zero."
+    try:
+        metadata = read_metadata(path)
+        if metadata.frame_rate <= 0 or metadata.frame_count <= 0:
+            return f"Video has no readable frames or frame rate: {path}"
+    except (OSError, ValueError) as exc:
+        return str(exc)
+    return None
+
+def run_test_video(args: argparse.Namespace) -> int:
+    started = time.perf_counter()
+    error = _validate_video(args.video_path, args.max_frames, args.interval_seconds)
+    if error:
+        print(error, file=sys.stderr)
+        return 2
+    model = None
+    try:
+        print(f"Loading model once: {args.model_name} (preset={args.preset}, requested_device={args.device})")
+        load_started = time.perf_counter()
+        model = GemmaVisionModel(args.model_name, args.device, args.preset)
+        load_seconds = time.perf_counter() - load_started
+        assessments = []
+        inference_seconds = 0.0
+        peak_bytes = 0
+        samples_per_second = 1.0 / args.interval_seconds
+        for sampled in islice(sample_frames(args.video_path, samples_per_second, 896), args.max_frames):
+            result = model.analyse_frame(sampled.image)
+            assessment = parse_model_response(result.raw_response, sampled.timestamp_seconds)
+            assessments.append(assessment)
+            inference_seconds += result.inference_seconds
+            peak_bytes = max(peak_bytes, result.peak_gpu_memory_bytes or 0)
+            print(f"\nFrame at {sampled.timestamp_seconds:.3f}s:")
+            print(json.dumps(assessment_to_dict(assessment), indent=2, ensure_ascii=False))
+            if assessment.person_status == "present":
+                print("Early stop: a person-present observation guarantees human review.")
+                break
+        decision = decide_clip(assessments)
+        relevant = next((item for item in assessments if item.review_required), None)
+        elapsed = time.perf_counter() - started
+        print("\nFinal clip result (automated review aid):")
+        print(f"Classification: {decision.status.value}")
+        print(f"First relevant timestamp: {relevant.timestamp_seconds:.3f}s" if relevant else "First relevant timestamp: none")
+        print(f"Frames analysed: {len(assessments)}")
+        print(f"Model load time: {load_seconds:.3f} seconds")
+        print(f"Total inference time: {inference_seconds:.3f} seconds")
+        print(f"Total elapsed time: {elapsed:.3f} seconds")
+        print(f"Actual device: {model.device_info.device} ({model.device_info.device_name})")
+        print(f"Peak allocated GPU memory: {peak_bytes / 1024**3:.2f} GiB" if peak_bytes else "Peak allocated GPU memory: n/a")
+        return 0
+    except (DeviceSelectionError, ModelLoadError, CudaOutOfMemoryError, ValueError) as exc:
+        print(f"ClipSift video inference failed: {exc}", file=sys.stderr)
+        return 2
+    except Exception as exc:
+        if args.debug:
+            traceback.print_exc()
+        else:
+            print(f"ClipSift video inference failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+    finally:
+        if model:
+            model.close()
 
 def run_scan(args: argparse.Namespace) -> int:
     paths = create_output_dirs(args.output); rows: list[ClipReportRow] = []
@@ -132,6 +210,6 @@ def run_scan(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(_normalise_args(list(sys.argv[1:] if argv is None else argv)))
-    return {"doctor": run_doctor, "test-image": run_test_image, "scan": run_scan}[args.command](args)
+    return {"doctor": run_doctor, "test-image": run_test_image, "test-video": run_test_video, "scan": run_scan}[args.command](args)
 
 if __name__ == "__main__": raise SystemExit(main())

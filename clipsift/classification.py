@@ -24,18 +24,36 @@ CONFIDENCE_SCORES = {
 
 @dataclass(frozen=True)
 class FrameAssessment:
-    person_visible: bool
-    confidence: str
+    person_status: str
+    assessment_confidence: str
     description: str
-    review_required: bool
     timestamp_seconds: float
     raw_response: str = ""
     parse_error: str | None = None
 
     @property
+    def person_visible(self) -> bool:
+        """Backwards-compatible boolean observation."""
+        return self.person_status == "present"
+
+    @property
+    def confidence(self) -> str:
+        """Backwards-compatible confidence name."""
+        return self.assessment_confidence
+
+    @property
+    def review_required(self) -> bool:
+        """ClipSift policy decision; never sourced from model output."""
+        return (
+            self.parse_error is not None
+            or self.person_status in {"present", "uncertain"}
+            or self.assessment_confidence == "low"
+        )
+
+    @property
     def score(self) -> float:
-        base = CONFIDENCE_SCORES.get(self.confidence.lower(), 0.0)
-        if not self.person_visible:
+        base = CONFIDENCE_SCORES.get(self.assessment_confidence, 0.0)
+        if self.person_status != "present":
             return 0.0
         return base
 
@@ -67,29 +85,32 @@ def parse_model_response(raw_response: str, timestamp_seconds: float) -> FrameAs
 
     try:
         data = json.loads(_extract_json_object(raw_response))
-        if not isinstance(data.get("person_visible"), bool):
-            raise TypeError("person_visible must be a JSON boolean")
-        if not isinstance(data.get("review_required"), bool):
-            raise TypeError("review_required must be a JSON boolean")
-        confidence = data.get("confidence")
+        if "person_status" in data:
+            person_status = data.get("person_status")
+            confidence = data.get("assessment_confidence")
+            if person_status not in {"present", "absent", "uncertain"}:
+                raise ValueError("person_status must be present, absent, or uncertain")
+        else:
+            if not isinstance(data.get("person_visible"), bool):
+                raise TypeError("person_visible must be a JSON boolean")
+            person_status = "present" if data["person_visible"] else "absent"
+            confidence = data.get("confidence")
         if not isinstance(confidence, str) or confidence.lower() not in CONFIDENCE_SCORES:
-            raise ValueError("confidence must be low, medium, or high")
+            raise ValueError("assessment confidence must be low, medium, or high")
         if not isinstance(data.get("description"), str):
             raise TypeError("description must be a string")
         return FrameAssessment(
-            person_visible=data["person_visible"],
-            confidence=confidence.lower(),
+            person_status=person_status,
+            assessment_confidence=confidence.lower(),
             description=data["description"].strip(),
-            review_required=data["review_required"],
             timestamp_seconds=timestamp_seconds,
             raw_response=raw_response,
         )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         return FrameAssessment(
-            person_visible=False,
-            confidence="low",
+            person_status="uncertain",
+            assessment_confidence="low",
             description="Model response could not be parsed safely.",
-            review_required=True,
             timestamp_seconds=timestamp_seconds,
             raw_response=raw_response,
             parse_error=str(exc),
@@ -111,17 +132,12 @@ def decide_clip(frame_assessments: list[FrameAssessment]) -> ClipDecision:
 
     strongest = max(frame_assessments, key=lambda assessment: assessment.score)
     person_votes = sum(1 for assessment in frame_assessments if assessment.person_visible)
-    high_person_votes = sum(
-        1
-        for assessment in frame_assessments
-        if assessment.person_visible and assessment.confidence.lower() == "high"
-    )
     review_votes = sum(1 for assessment in frame_assessments if assessment.review_required or assessment.parse_error)
 
-    if person_votes >= 2 or high_person_votes >= 1:
+    if person_votes >= 1:
         status = ClipStatus.PERSON_DETECTED
-        rationale = "Multiple likely detections or one high-confidence detection were found."
-    elif person_votes == 1 or review_votes > 0:
+        rationale = "At least one frame reported a person present, so ClipSift requires human review."
+    elif review_votes > 0:
         status = ClipStatus.NEEDS_REVIEW
         rationale = "The evidence is ambiguous or one sampled frame needs manual review."
     else:
@@ -142,6 +158,8 @@ def assessment_to_dict(assessment: FrameAssessment | None) -> dict[str, Any]:
     if assessment is None:
         return {}
     return {
+        "person_status": assessment.person_status,
+        "assessment_confidence": assessment.assessment_confidence,
         "person_visible": assessment.person_visible,
         "confidence": assessment.confidence,
         "description": assessment.description,

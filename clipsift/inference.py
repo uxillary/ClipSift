@@ -22,11 +22,12 @@ PROMPT = """You are assisting with privacy-conscious CCTV triage.
 Look only for whether a person is likely visible in this frame. Do not identify anyone.
 Return only JSON with these keys:
 {
-  "person_visible": true or false,
-  "confidence": "low" or "medium" or "high",
-  "description": "brief neutral description",
-  "review_required": true or false
+  "person_status": "present" or "absent" or "uncertain",
+  "assessment_confidence": "low" or "medium" or "high",
+  "description": "brief neutral description"
 }
+Confidence means confidence in the complete visual assessment. Do not decide whether
+human review is required; ClipSift applies that policy deterministically.
 """
 
 
