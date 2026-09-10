@@ -1,7 +1,7 @@
 """Command-line entry point for ClipSift."""
 from __future__ import annotations
 
-import argparse, json, shutil, sys, time, traceback
+import argparse, json, sys, time, traceback
 from itertools import islice
 from pathlib import Path
 import cv2
@@ -10,10 +10,9 @@ from clipsift.classification import ClipStatus, assessment_to_dict, decide_clip,
 from clipsift.device import DeviceSelectionError
 from clipsift.doctor import collect_doctor_info, format_doctor_info
 from clipsift.inference import CudaOutOfMemoryError, DEFAULT_MODEL_NAME, GemmaVisionModel, ModelLoadError
-from clipsift.reporting import Benchmark, ClipReportRow, create_output_dirs, row_from_decision, write_benchmark_json, write_report_csv
+from clipsift.scanner import ScanConfig, ScanEvent, scan_folder
 from clipsift.video import (
-    find_videos, frames_at_timestamps, read_metadata, sample_frames,
-    save_frame, select_video_timestamps,
+    frames_at_timestamps, read_metadata, select_video_timestamps,
 )
 
 def _device_options(parser: argparse.ArgumentParser) -> None:
@@ -188,49 +187,36 @@ def run_test_video(args: argparse.Namespace) -> int:
             model.close()
 
 def run_scan(args: argparse.Namespace) -> int:
-    paths = create_output_dirs(args.output); rows: list[ClipReportRow] = []
-    videos_processed = frames_analysed = 0; seconds = 0.0; timings: list[float] = []
-    started = time.perf_counter(); model = None; code = 0
+    def print_event(event: ScanEvent) -> None:
+        if event.kind == "video_started":
+            print(f"[{event.current}/{event.total}] Scanning {event.filename}")
+        elif event.kind == "video_completed":
+            print(f"  => {event.message}")
+        elif event.kind == "video_error":
+            print(f"  Error scanning {event.filename}: {event.message}", file=sys.stderr)
+        elif event.kind in {"operation", "model_loaded"}:
+            print(event.message)
+
     try:
-        videos = find_videos(args.input_folder)
-        if not videos: print(f"No supported videos found in {args.input_folder}", file=sys.stderr)
-        print(f"Loading model: {args.model_name}")
-        model = GemmaVisionModel(args.model_name, args.device, args.preset)
-        print(f"Actual device: {model.device_info.device} ({model.device_info.device_name})")
-        for number, video in enumerate(videos, 1):
-            print(f"[{number}/{len(videos)}] Scanning {video.name}"); metadata = read_metadata(video)
-            assessments, frames = [], {}
-            try:
-                for sampled in sample_frames(video, args.samples_per_second, args.max_frame_size):
-                    result = model.analyse_frame(sampled.image); timings.append(result.inference_seconds)
-                    item = parse_model_response(result.raw_response, sampled.timestamp_seconds)
-                    assessments.append(item); frames[item.timestamp_seconds] = sampled.image; frames_analysed += 1
-                decision = decide_clip(assessments); evidence = None
-                if decision.strongest_frame:
-                    evidence = paths["evidence"] / f"{video.stem}_{decision.strongest_frame.timestamp_seconds:.1f}s.jpg"
-                    save_frame(evidence, frames[decision.strongest_frame.timestamp_seconds])
-                if decision.status == ClipStatus.PERSON_DETECTED: shutil.copy2(video, paths["flagged"] / video.name)
-                elif decision.status == ClipStatus.NEEDS_REVIEW: shutil.copy2(video, paths["needs_review"] / video.name)
-                rows.append(row_from_decision(video, metadata.duration_seconds, decision, evidence))
-                videos_processed += 1; seconds += metadata.duration_seconds; print(f"  => {decision.status.value}")
-            except CudaOutOfMemoryError: raise
-            except Exception as exc:
-                print(f"  Error scanning {video.name}: {exc}", file=sys.stderr)
-                rows.append(row_from_decision(video, metadata.duration_seconds, decide_clip([]), None, str(exc)))
+        scan_folder(ScanConfig(
+            input_folder=args.input_folder,
+            output_folder=args.output,
+            device=args.device,
+            preset=args.preset,
+            sampling_strategy=None,
+            samples_per_second=args.samples_per_second,
+            max_frame_size=args.max_frame_size,
+            model_name=args.model_name,
+        ), on_event=print_event)
+        print(f"Report written to {args.output / 'report.csv'}")
+        print(f"Benchmark written to {args.output / 'benchmark.json'}")
+        return 0
     except KeyboardInterrupt:
-        print("Cancellation requested; writing partial report.", file=sys.stderr); code = 130
+        print("Cancellation requested.", file=sys.stderr)
+        return 130
     except Exception as exc:
-        print(f"ClipSift failed: {exc}", file=sys.stderr); code = 2
-    finally:
-        elapsed = time.perf_counter() - started; write_report_csv(args.output / "report.csv", rows)
-        average = sum(timings) / len(timings) if timings else 0.0
-        write_benchmark_json(args.output / "benchmark.json", Benchmark(
-            device_name=model.device_info.device_name if model else "unknown", device_type=model.device_info.device if model else "unknown",
-            model_name=args.model_name, videos_processed=videos_processed, video_minutes_processed=round(seconds / 60, 3),
-            frames_analysed=frames_analysed, total_processing_time_seconds=round(elapsed, 3), average_inference_time_seconds=round(average, 4),
-            approximate_frames_per_second=round(frames_analysed / elapsed, 4) if elapsed else 0.0))
-        if model: model.close()
-    return code
+        print(f"ClipSift failed: {exc}", file=sys.stderr)
+        return 2
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(_normalise_args(list(sys.argv[1:] if argv is None else argv)))

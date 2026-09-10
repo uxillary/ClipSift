@@ -78,6 +78,22 @@ python -m clipsift.cli C:\path\to\clips --output "ClipSift Results"
 
 Original recordings are not modified. Generated review folders, evidence, private media, credentials, model caches, and weights are excluded from Git.
 
+## Windows desktop GUI — Phase 1
+
+The local ttkbootstrap interface wraps the same scan service used by the CLI. It keeps model loading and video analysis on a worker thread while all Tk updates are delivered to the main thread through a queue. Gemma is loaded once per scan and reused across videos; cancellation is cooperative between frames and files, and completed reports remain available.
+
+Install the dependencies and editable entry points, then launch:
+
+```powershell
+python -m pip install -r requirements.txt
+python -m pip install -e .
+python -m clipsift.gui
+# Or, after editable installation:
+clipsift-gui
+```
+
+Choose input/output folders, Auto/GPU/CPU, Hybrid/Uniform/Motion sampling, and the maximum number of frames. The results table and activity log are automated-review aids; Gemma supplies observations while ClipSift's deterministic policy supplies classifications. Original videos are never modified or deleted.
+
 ## Tests
 
 Tests are offline and mock model/CUDA boundaries; they do not download Gemma or read private media.

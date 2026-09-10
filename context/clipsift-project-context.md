@@ -58,7 +58,7 @@ ClipSift addresses these areas through a practical end-user problem, open-model 
 - OpenCV for reading videos and extracting frames
 - Pillow where image handling or thumbnails require it
 - A simple command-line MVP first
-- A Windows desktop GUI in a later stage
+- A Phase 1 Windows desktop GUI using ttkbootstrap, backed by the same scan service as the CLI
 - PyInstaller for a later portable Windows release
 
 ### Open model
@@ -88,6 +88,10 @@ An initial controlled two-image smoke test completed on an RTX 3060 Laptop GPU u
 - Empty image: no person observed, with car, fence and houses described, 9.806 seconds, 3.15 GiB peak allocated GPU memory.
 
 These are initial controlled smoke-test results, not a general accuracy benchmark. The single-video smoke-test command loads Gemma once and reuses it across up to 12 selected frames by default. Hybrid selection combines full-timeline coverage with spaced high-motion candidates from a lightweight OpenCV pass. Motion only prioritises frames and is never considered person detection; Gemma makes the visual observation and ClipSift code makes the review decision.
+
+### Phase 1 desktop interface
+
+The local Windows ttkbootstrap GUI launches with `python -m clipsift.gui` or the installed `clipsift-gui` entry point. It uses a worker thread for the shared folder-scan service and a thread-safe event queue for main-thread Tk updates. One Gemma instance is reused across all videos in a scan. Cooperative cancellation preserves completed rows and reports. GUI packaging as an executable remains a later stage.
 
 The final implementation must use an exact Gemma checkpoint that genuinely supports image input and fits the available environment. The README must record the exact model name, model licence and runtime configuration actually tested. Do not invent these details in advance.
 
