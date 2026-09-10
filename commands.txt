@@ -52,3 +52,4 @@ python -c "from huggingface_hub import model_info; info=model_info('google/gemma
 test 
 
 python -m clipsift.cli test-image local_test_data\person.png --device auto --preset safe
+python -m clipsift.cli test-image local_test_data\empty.png --device auto --preset safe

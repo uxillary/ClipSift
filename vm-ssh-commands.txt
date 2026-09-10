@@ -1,0 +1,13 @@
+cd ~/ClipSift
+source .venv/bin/activate
+
+nvidia-smi
+ls -lh local_test_data
+
+hf auth login
+
+hf auth whoami
+
+hf download google/gemma-3-4b-it
+
+df -h /
