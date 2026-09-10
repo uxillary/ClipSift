@@ -11,7 +11,10 @@ from clipsift.device import DeviceSelectionError
 from clipsift.doctor import collect_doctor_info, format_doctor_info
 from clipsift.inference import CudaOutOfMemoryError, DEFAULT_MODEL_NAME, GemmaVisionModel, ModelLoadError
 from clipsift.reporting import Benchmark, ClipReportRow, create_output_dirs, row_from_decision, write_benchmark_json, write_report_csv
-from clipsift.video import find_videos, read_metadata, sample_frames, save_frame
+from clipsift.video import (
+    find_videos, frames_at_timestamps, read_metadata, sample_frames,
+    save_frame, select_video_timestamps,
+)
 
 def _device_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--device", default="auto", help="auto, cpu, cuda, or cuda:N (default: auto)")
@@ -37,8 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     video = commands.add_parser("test-video", help="Test up to a few sampled frames from one local video")
     video.add_argument("video_path", type=Path)
     video.add_argument("--model-name", default=DEFAULT_MODEL_NAME)
-    video.add_argument("--max-frames", type=int, default=3)
-    video.add_argument("--interval-seconds", type=float, default=2.0)
+    video.add_argument("--max-frames", type=int, default=12)
+    video.add_argument("--sampling-strategy", choices=("uniform", "motion", "hybrid"), default="hybrid")
+    video.add_argument("--motion-interval-seconds", "--interval-seconds", dest="motion_interval_seconds", type=float, default=0.5)
+    video.add_argument("--dry-run", action="store_true", help="Display selected timestamps without loading Gemma")
     video.add_argument("--debug", action="store_true", help="Show a traceback for unexpected errors")
     _device_options(video)
     return parser
@@ -112,12 +117,30 @@ def _validate_video(path: Path, max_frames: int, interval_seconds: float) -> str
 
 def run_test_video(args: argparse.Namespace) -> int:
     started = time.perf_counter()
-    error = _validate_video(args.video_path, args.max_frames, args.interval_seconds)
+    error = _validate_video(args.video_path, args.max_frames, args.motion_interval_seconds)
     if error:
         print(error, file=sys.stderr)
         return 2
     model = None
     try:
+        metadata = read_metadata(args.video_path)
+        selections = select_video_timestamps(
+            args.video_path, metadata, args.sampling_strategy, args.max_frames, args.motion_interval_seconds
+        )
+        if not selections:
+            raise ValueError("Sampling did not produce any readable timestamps.")
+        print(f"Video duration: {metadata.duration_seconds:.3f} seconds")
+        print(f"FPS: {metadata.frame_rate:.3f}")
+        print(f"Total source frames: {metadata.frame_count}")
+        print(f"Sampling strategy: {args.sampling_strategy}")
+        print(f"Timestamps selected: {len(selections)}")
+        for selection in selections:
+            origins = "+".join(selection.sources)
+            motion = f", motion_score={selection.motion_score:.3f}" if selection.motion_score is not None else ""
+            print(f"  {selection.timestamp_seconds:.3f}s [{origins}{motion}]")
+        if args.dry_run:
+            print("Dry run complete; Gemma was not loaded.")
+            return 0
         print(f"Loading model once: {args.model_name} (preset={args.preset}, requested_device={args.device})")
         load_started = time.perf_counter()
         model = GemmaVisionModel(args.model_name, args.device, args.preset)
@@ -125,8 +148,7 @@ def run_test_video(args: argparse.Namespace) -> int:
         assessments = []
         inference_seconds = 0.0
         peak_bytes = 0
-        samples_per_second = 1.0 / args.interval_seconds
-        for sampled in islice(sample_frames(args.video_path, samples_per_second, 896), args.max_frames):
+        for sampled in islice(frames_at_timestamps(args.video_path, selections, 896), args.max_frames):
             result = model.analyse_frame(sampled.image)
             assessment = parse_model_response(result.raw_response, sampled.timestamp_seconds)
             assessments.append(assessment)
@@ -134,15 +156,17 @@ def run_test_video(args: argparse.Namespace) -> int:
             peak_bytes = max(peak_bytes, result.peak_gpu_memory_bytes or 0)
             print(f"\nFrame at {sampled.timestamp_seconds:.3f}s:")
             print(json.dumps(assessment_to_dict(assessment), indent=2, ensure_ascii=False))
-            if assessment.person_status == "present":
-                print("Early stop: a person-present observation guarantees human review.")
+            if assessment.person_status == "present" and assessment.assessment_confidence in {"medium", "high"}:
+                print("Early stop: a confident person-present observation guarantees human review.")
                 break
         decision = decide_clip(assessments)
         relevant = next((item for item in assessments if item.review_required), None)
+        first_person = next((item for item in assessments if item.person_status == "present"), None)
         elapsed = time.perf_counter() - started
         print("\nFinal clip result (automated review aid):")
         print(f"Classification: {decision.status.value}")
         print(f"First relevant timestamp: {relevant.timestamp_seconds:.3f}s" if relevant else "First relevant timestamp: none")
+        print(f"First person timestamp: {first_person.timestamp_seconds:.3f}s" if first_person else "First person timestamp: none")
         print(f"Frames analysed: {len(assessments)}")
         print(f"Model load time: {load_seconds:.3f} seconds")
         print(f"Total inference time: {inference_seconds:.3f} seconds")

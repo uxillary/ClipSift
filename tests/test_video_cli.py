@@ -5,7 +5,7 @@ import numpy as np
 
 from clipsift import cli
 from clipsift.inference import InferenceResult
-from clipsift.video import SampledFrame, VideoMetadata
+from clipsift.video import SampledFrame, SelectedTimestamp, VideoMetadata
 
 
 def _video(tmp_path: Path) -> Path:
@@ -46,7 +46,9 @@ def _configure(monkeypatch, responses: list[str], frame_count: int = 5) -> None:
     _FakeModel.responses = responses
     monkeypatch.setattr(cli, "GemmaVisionModel", _FakeModel)
     monkeypatch.setattr(cli, "read_metadata", _metadata)
-    monkeypatch.setattr(cli, "sample_frames", lambda *args: _frames(frame_count))
+    selections = [SelectedTimestamp(index * 2.0, ("uniform",)) for index in range(frame_count)]
+    monkeypatch.setattr(cli, "select_video_timestamps", lambda *args: selections)
+    monkeypatch.setattr(cli, "frames_at_timestamps", lambda *args: _frames(frame_count))
 
 
 def test_video_enforces_max_frames_and_loads_model_once(monkeypatch, tmp_path: Path) -> None:
@@ -79,3 +81,11 @@ def test_unreadable_video_does_not_load_model(monkeypatch, tmp_path: Path, capsy
     assert cli.main(["test-video", str(_video(tmp_path))]) == 2
     assert _FakeModel.loads == 0
     assert "Could not open video" in capsys.readouterr().err
+
+
+def test_dry_run_never_loads_model(monkeypatch, tmp_path: Path, capsys) -> None:
+    absent = '{"person_status":"absent","assessment_confidence":"high","description":"Empty"}'
+    _configure(monkeypatch, [absent])
+    assert cli.main(["test-video", str(_video(tmp_path)), "--dry-run"]) == 0
+    assert _FakeModel.loads == 0
+    assert "Gemma was not loaded" in capsys.readouterr().out

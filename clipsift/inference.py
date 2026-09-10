@@ -28,6 +28,10 @@ Return only JSON with these keys:
 }
 Confidence means confidence in the complete visual assessment. Do not decide whether
 human review is required; ClipSift applies that policy deterministically.
+A clear scene with definitely no person can be absent with high confidence.
+A small, obscured, or distant possible figure must be uncertain.
+A clearly visible person must be present.
+If frame quality prevents a reliable decision, use uncertain or low confidence.
 """
 
 

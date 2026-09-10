@@ -18,6 +18,8 @@ ClipSift is a privacy-conscious CCTV review assistant that uses AI and GPU infer
 
 Home CCTV systems can generate many short clips, but manually watching every recording is slow and repetitive. Most clips may contain no useful activity.
 
+The current CCTV camera typically creates clips approximately two minutes long. Frame selection must therefore cover the complete readable duration rather than only the beginning.
+
 ClipSift is intended to perform the first review pass. It samples frames from a folder of recordings, flags likely human activity, and creates a clear report showing which clips should be checked manually.
 
 It is a **triage and review tool**, not an autonomous security decision system.
@@ -85,7 +87,7 @@ An initial controlled two-image smoke test completed on an RTX 3060 Laptop GPU u
 - Person image: person near a fence observed, 8.439 seconds, 3.15 GiB peak allocated GPU memory.
 - Empty image: no person observed, with car, fence and houses described, 9.806 seconds, 3.15 GiB peak allocated GPU memory.
 
-These are initial controlled smoke-test results, not a general accuracy benchmark. The single-video smoke-test command loads Gemma once and reuses it across up to three sampled frames by default.
+These are initial controlled smoke-test results, not a general accuracy benchmark. The single-video smoke-test command loads Gemma once and reuses it across up to 12 selected frames by default. Hybrid selection combines full-timeline coverage with spaced high-motion candidates from a lightweight OpenCV pass. Motion only prioritises frames and is never considered person detection; Gemma makes the visual observation and ClipSift code makes the review decision.
 
 The final implementation must use an exact Gemma checkpoint that genuinely supports image input and fits the available environment. The README must record the exact model name, model licence and runtime configuration actually tested. Do not invent these details in advance.
 

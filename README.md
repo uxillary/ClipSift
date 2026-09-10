@@ -45,13 +45,21 @@ These two observations are a smoke-test milestone, not a general accuracy benchm
 
 ## Single-video smoke test
 
-This command samples at most three frames approximately two seconds apart by default. Gemma is loaded once and reused for every sampled frame. The source is read only and is never moved or uploaded.
+Current CCTV source clips are typically about two minutes long. The video smoke test selects at most 12 frames by default across the complete readable duration. Gemma is loaded once and reused for every selected frame. The source is read only and is never moved or uploaded.
 
 ```powershell
-python -m clipsift.cli test-video local_test_data/person-short.mp4 --device auto --preset safe --max-frames 3
+python -m clipsift.cli test-video local_test_data/person-short.mp4 --device auto --preset safe --sampling-strategy hybrid --max-frames 12
 ```
 
-Use `--interval-seconds`, `--max-frames`, and `--debug` to adjust the controlled test. ClipSift stops early when a `present` observation has already guaranteed human review.
+The default `--sampling-strategy hybrid` mixes full-timeline coverage with high-motion candidates found by a lightweight grayscale OpenCV pass. Motion only prioritises frames; it is never treated as evidence that a person is present. Use `uniform` for timeline-only selection or `motion` for spaced motion peaks. `--motion-interval-seconds`, `--max-frames`, and `--debug` adjust the controlled test. ClipSift stops early only after a confident `present` observation.
+
+Inspect selection without loading Gemma:
+
+```powershell
+python -m clipsift.cli test-video local_test_data/person-short.mp4 --sampling-strategy hybrid --max-frames 12 --dry-run
+```
+
+Gemma makes the visual observation; deterministic ClipSift application policy makes the final review decision.
 
 `auto` selects CUDA device 0 when PyTorch reports CUDA, otherwise CPU. Use `--device cuda`, `--device cuda:1`, or `--device cpu` to make an explicit choice. Device indices are validated before model loading; CUDA errors never cause a silent CPU fallback. This makes the same command portable between desktop and laptop GPUs without hard-coded GPU names.
 
