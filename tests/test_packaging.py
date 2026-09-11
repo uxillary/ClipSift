@@ -3,11 +3,16 @@ from pathlib import Path
 
 import clipsift.packaged_smoke as packaged_smoke
 from clipsift.readiness import DiagnosticReport
-from clipsift.resources import resource_path
+from clipsift.resources import resource_path, set_windows_app_user_model_id
 
 
 def test_resource_path_supports_explicit_bundle_root(tmp_path: Path) -> None:
     assert resource_path("assets/clipsift.ico", tmp_path) == tmp_path / "assets" / "clipsift.ico"
+
+
+def test_windows_app_id_is_noop_off_windows(monkeypatch) -> None:
+    monkeypatch.setattr("clipsift.resources.sys.platform", "linux")
+    assert set_windows_app_user_model_id("ClipSift.test") is False
 
 
 def test_packaged_smoke_imports_modules_without_loading_model(tmp_path: Path, monkeypatch) -> None:

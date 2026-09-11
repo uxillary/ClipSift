@@ -33,7 +33,7 @@ from clipsift.readiness import (
     run_preflight,
     run_system_check,
 )
-from clipsift.resources import resource_path
+from clipsift.resources import resource_path, set_windows_app_user_model_id
 from clipsift.scanner import ScanConfig, ScanEvent, VideoScanResult, scan_folder
 
 
@@ -68,15 +68,22 @@ class ClipSiftApp:
     DEVICE_VALUES = {"Auto": "auto", "GPU": "cuda", "CPU": "cpu"}
     STRATEGY_VALUES = {"Hybrid": "hybrid", "Uniform": "uniform", "Motion": "motion"}
     FILTERS = ("All", "Person Detected", "Needs Review", "No Person Detected", "Errors")
+    UI_ICON_FILES = {
+        "browse": "ui-browse-18.png",
+        "start": "ui-start-18.png",
+        "cancel": "ui-cancel-18.png",
+        "results": "ui-results-18.png",
+        "check": "ui-check-18.png",
+        "about": "ui-about-18.png",
+        "evidence": "ui-evidence-18.png",
+        "video": "ui-video-18.png",
+    }
 
     def __init__(self, root: ttk.Window) -> None:
         self.root = root
-        icon_path = resource_path("assets/clipsift.ico")
-        if icon_path.is_file():
-            try:
-                self.root.iconbitmap(default=str(icon_path))
-            except Exception:
-                pass
+        self.window_icon_path = resource_path("assets/clipsift.ico")
+        self._apply_window_icon(self.root)
+        self.ui_images = self._load_ui_images()
         self.preferences = load_preferences()
         self.events: queue.Queue[ScanEvent | tuple[object, ...]] = queue.Queue()
         self.cancel_event = threading.Event()
@@ -121,14 +128,17 @@ class ClipSiftApp:
         header.pack(fill="x", pady=(0, 18))
         title = ttk.Frame(header, style="App.TFrame")
         title.pack(side="left")
-        ttk.Label(title, text="ClipSift", font=FONTS["title"], foreground=COLORS["teal"], style="App.TLabel").pack(anchor="w")
-        ttk.Label(title, text="LOCAL CCTV REVIEW AID  ·  GEMMA OBSERVATIONS, CLIPSIFT DECISIONS", font=FONTS["small"], style="Muted.TLabel").pack(anchor="w", pady=(3, 0))
+        ttk.Label(title, image=self.ui_images["header"], style="App.TLabel").pack(side="left", padx=(0, 11), pady=(1, 0))
+        title_text = ttk.Frame(title, style="App.TFrame")
+        title_text.pack(side="left")
+        ttk.Label(title_text, text="ClipSift", font=FONTS["title"], foreground=COLORS["teal"], style="App.TLabel").pack(anchor="w")
+        ttk.Label(title_text, text="LOCAL CCTV REVIEW AID  ·  GEMMA OBSERVATIONS, CLIPSIFT DECISIONS", font=FONTS["small"], style="Muted.TLabel").pack(anchor="w", pady=(3, 0))
         header_actions = ttk.Frame(header, style="App.TFrame")
         header_actions.pack(side="right", anchor="n", pady=(3, 0))
         self.status_label = ttk.Label(header_actions, textvariable=self.status_var, padding=(12, 6), bootstyle="secondary-inverse")
         self.status_label.pack(side="right", padx=(12, 0))
-        ttk.Button(header_actions, text="About", command=self._show_about, bootstyle="link").pack(side="right", padx=(5, 0))
-        self.check_button = ttk.Button(header_actions, text="System Check", command=self._check_setup, bootstyle="secondary")
+        ttk.Button(header_actions, text="About", image=self.ui_images["about"], compound="left", command=self._show_about, bootstyle="link").pack(side="right", padx=(5, 0))
+        self.check_button = ttk.Button(header_actions, text="System Check", image=self.ui_images["check"], compound="left", command=self._check_setup, bootstyle="secondary")
         self.check_button.pack(side="right")
 
         controls = ttk.Frame(outer, padding=(16, 14), style="Panel.TFrame")
@@ -155,11 +165,11 @@ class ClipSiftApp:
 
         actions = ttk.Frame(outer, style="App.TFrame")
         actions.pack(fill="x", pady=(0, 12))
-        self.start_button = ttk.Button(actions, text="Start Scan", command=self._start_scan, bootstyle="success", padding=(22, 8))
+        self.start_button = ttk.Button(actions, text="Start Scan", image=self.ui_images["start"], compound="left", command=self._start_scan, bootstyle="success", padding=(22, 8))
         self.start_button.pack(side="left")
-        self.cancel_button = ttk.Button(actions, text="Cancel", command=self._cancel_scan, state="disabled", bootstyle="outline-secondary", padding=(16, 8))
+        self.cancel_button = ttk.Button(actions, text="Cancel", image=self.ui_images["cancel"], compound="left", command=self._cancel_scan, state="disabled", bootstyle="outline-secondary", padding=(16, 8))
         self.cancel_button.pack(side="left", padx=(8, 0))
-        ttk.Button(actions, text="Open Results Folder", command=self._open_results, bootstyle="outline-secondary", padding=(14, 8)).pack(side="right")
+        ttk.Button(actions, text="Open Results Folder", image=self.ui_images["results"], compound="left", command=self._open_results, bootstyle="outline-secondary", padding=(14, 8)).pack(side="right")
 
         progress = ttk.Frame(outer, padding=(14, 10), style="Panel.TFrame")
         progress.pack(fill="x", pady=(0, 12))
@@ -218,13 +228,13 @@ class ClipSiftApp:
 
         preview_frame = ttk.Frame(preview_box, padding=1, style="Evidence.TFrame")
         preview_frame.pack(fill="both", expand=True, pady=(0, 10))
-        self.preview_label = ttk.Label(preview_frame, text="Select a result to view evidence", anchor="center", justify="center", style="Preview.TLabel")
+        self.preview_label = ttk.Label(preview_frame, text="Select a result to view evidence", image=self.ui_images["watermark"], compound="top", anchor="center", justify="center", style="Preview.TLabel")
         self.preview_label.pack(fill="both", expand=True, padx=1, pady=1)
         preview_actions = ttk.Frame(preview_box, style="Panel.TFrame")
         preview_actions.pack(fill="x")
-        self.open_evidence_button = ttk.Button(preview_actions, text="Open Evidence", command=self._open_evidence, state="disabled", bootstyle="outline-success")
+        self.open_evidence_button = ttk.Button(preview_actions, text="Open Evidence", image=self.ui_images["evidence"], compound="left", command=self._open_evidence, state="disabled", bootstyle="outline-success")
         self.open_evidence_button.pack(side="left", expand=True, fill="x", padx=(0, 4))
-        self.open_video_button = ttk.Button(preview_actions, text="Open Video", command=self._open_video, state="disabled", bootstyle="outline-secondary")
+        self.open_video_button = ttk.Button(preview_actions, text="Open Video", image=self.ui_images["video"], compound="left", command=self._open_video, state="disabled", bootstyle="outline-secondary")
         self.open_video_button.pack(side="left", expand=True, fill="x", padx=(4, 0))
 
         self.log_toggle = ttk.Button(outer, text="Show activity log", command=self._toggle_log, bootstyle="link")
@@ -257,11 +267,30 @@ class ClipSiftApp:
         style.map("Treeview", background=[("selected", COLORS["teal_dark"])], foreground=[("selected", "#ffffff")])
         style.map("Treeview.Heading", background=[("active", COLORS["border"])])
 
+    def _load_ui_images(self) -> dict[str, ImageTk.PhotoImage]:
+        files = {
+            "header": "brand-header-36.png",
+            "watermark": "brand-watermark-96.png",
+            **self.UI_ICON_FILES,
+        }
+        images: dict[str, ImageTk.PhotoImage] = {}
+        for name, filename in files.items():
+            with Image.open(resource_path(f"assets/{filename}")) as source:
+                images[name] = ImageTk.PhotoImage(source.convert("RGBA"))
+        return images
+
+    def _apply_window_icon(self, window) -> None:
+        if self.window_icon_path.is_file():
+            try:
+                window.iconbitmap(default=str(self.window_icon_path))
+            except Exception:
+                pass
+
     def _folder_row(self, parent, row: int, label: str, variable, command) -> None:
         ttk.Label(parent, text=label, style="Panel.TLabel").grid(row=row, column=0, sticky="w", padx=(0, 12), pady=5)
         entry = ttk.Entry(parent, textvariable=variable)
         entry.grid(row=row, column=1, sticky="ew", pady=5, ipady=4)
-        browse = ttk.Button(parent, text="Browse…", command=command, bootstyle="outline-success", padding=(13, 6))
+        browse = ttk.Button(parent, text="Browse…", image=self.ui_images["browse"], compound="left", command=command, bootstyle="outline-success", padding=(13, 6))
         browse.grid(row=row, column=2, padx=(10, 0), pady=5)
         self.configuration_controls.extend(((entry, "normal"), (browse, "normal")))
 
@@ -458,7 +487,7 @@ class ClipSiftApp:
     def _clear_preview(self, message: str) -> None:
         self.selected_result = None
         self.preview_photo = None
-        self.preview_label.configure(image="", text=message)
+        self.preview_label.configure(image=self.ui_images["watermark"], text=message, compound="top")
         self.open_evidence_button.configure(state="disabled")
         self.open_video_button.configure(state="disabled")
 
@@ -533,6 +562,7 @@ class ClipSiftApp:
 
     def _show_system_check(self, report: DiagnosticReport) -> None:
         dialog = ttk.Toplevel(self.root)
+        self._apply_window_icon(dialog)
         dialog.title("ClipSift System Check")
         dialog.transient(self.root)
         dialog.grab_set()
@@ -559,6 +589,7 @@ class ClipSiftApp:
 
     def _show_about(self) -> None:
         dialog = ttk.Toplevel(self.root)
+        self._apply_window_icon(dialog)
         dialog.title("About ClipSift")
         dialog.transient(self.root)
         dialog.resizable(False, False)
@@ -585,6 +616,7 @@ def main() -> None:
 
         run_packaged_smoke_check(Path(sys.argv[2]))
         return
+    set_windows_app_user_model_id("ClipSift.ClipSift.0.1.0")
     root = ttk.Window(themename="darkly")
     ClipSiftApp(root)
     root.mainloop()

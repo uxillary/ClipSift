@@ -10,7 +10,8 @@ root = Path(SPEC).resolve().parent
 icon = root / "assets" / "clipsift.ico"
 version_file = root / "build" / "ClipSift" / "version_info.txt"
 
-datas = [(str(icon), "assets")]
+datas = [(str(path), "assets") for path in (root / "assets").glob("*.png")]
+datas.append((str(icon), "assets"))
 datas += collect_data_files("ttkbootstrap")
 datas += collect_data_files("transformers", includes=["**/*.json"])
 for distribution in ("accelerate", "bitsandbytes", "opencv-python", "pillow", "torch", "transformers", "ttkbootstrap"):
