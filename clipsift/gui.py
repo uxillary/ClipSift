@@ -37,6 +37,31 @@ from clipsift.resources import resource_path
 from clipsift.scanner import ScanConfig, ScanEvent, VideoScanResult, scan_folder
 
 
+COLORS = {
+    "background": "#151719",
+    "panel": "#1d2023",
+    "raised": "#24282c",
+    "border": "#30353a",
+    "text": "#e6ebe7",
+    "muted": "#98a19b",
+    "teal": "#45c4a8",
+    "teal_dark": "#245b51",
+    "amber": "#d7a84b",
+    "neutral": "#8e979f",
+    "danger": "#e06c75",
+    "row_alt": "#202428",
+}
+
+FONTS = {
+    "title": ("Segoe UI Variable Display", 26, "bold"),
+    "subtitle": ("Segoe UI", 10),
+    "section": ("Segoe UI Semibold", 10),
+    "body": ("Segoe UI", 10),
+    "small": ("Segoe UI", 9),
+    "count": ("Segoe UI Variable Display", 20, "bold"),
+}
+
+
 class ClipSiftApp:
     """Tk main-thread event consumer backed by one scan worker."""
 
@@ -74,6 +99,7 @@ class ClipSiftApp:
         self.operation_var = ttk.StringVar(value="Choose an input folder to begin")
         self.status_var = ttk.StringVar(value="● Idle")
         self.progress_var = ttk.DoubleVar(value=0.0)
+        self.progress_detail_var = ttk.StringVar(value="0%")
         self.filter_var = ttk.StringVar(value="All")
         self.filter_labels = {name: ttk.StringVar() for name in self.FILTERS}
         self.summary_vars = {name: ttk.StringVar(value="0") for name in self.FILTERS[1:4]}
@@ -86,67 +112,74 @@ class ClipSiftApp:
     def _build(self) -> None:
         self.root.title("ClipSift")
         self.root.geometry(self.preferences.window_geometry)
-        self.root.minsize(1000, 700)
-        outer = ttk.Frame(self.root, padding=18)
+        self.root.minsize(1060, 720)
+        self._configure_styles()
+        outer = ttk.Frame(self.root, padding=(24, 20, 24, 14), style="App.TFrame")
         outer.pack(fill="both", expand=True)
 
-        header = ttk.Frame(outer)
-        header.pack(fill="x", pady=(0, 14))
-        title = ttk.Frame(header)
+        header = ttk.Frame(outer, style="App.TFrame")
+        header.pack(fill="x", pady=(0, 18))
+        title = ttk.Frame(header, style="App.TFrame")
         title.pack(side="left")
-        ttk.Label(title, text="ClipSift", font=("Segoe UI", 24, "bold"), bootstyle="success").pack(anchor="w")
-        ttk.Label(title, text="Local CCTV review aid · observations by Gemma, decisions by ClipSift", font=("Segoe UI", 10)).pack(anchor="w")
-        self.status_label = ttk.Label(header, textvariable=self.status_var, padding=(12, 6), bootstyle="secondary-inverse")
-        self.status_label.pack(side="right", anchor="n")
-        ttk.Button(header, text="About", command=self._show_about, bootstyle="link").pack(side="right", anchor="n", padx=4)
-        self.check_button = ttk.Button(header, text="System Check", command=self._check_setup, bootstyle="secondary")
-        self.check_button.pack(side="right", anchor="n", padx=4)
+        ttk.Label(title, text="ClipSift", font=FONTS["title"], foreground=COLORS["teal"], style="App.TLabel").pack(anchor="w")
+        ttk.Label(title, text="LOCAL CCTV REVIEW AID  ·  GEMMA OBSERVATIONS, CLIPSIFT DECISIONS", font=FONTS["small"], style="Muted.TLabel").pack(anchor="w", pady=(3, 0))
+        header_actions = ttk.Frame(header, style="App.TFrame")
+        header_actions.pack(side="right", anchor="n", pady=(3, 0))
+        self.status_label = ttk.Label(header_actions, textvariable=self.status_var, padding=(12, 6), bootstyle="secondary-inverse")
+        self.status_label.pack(side="right", padx=(12, 0))
+        ttk.Button(header_actions, text="About", command=self._show_about, bootstyle="link").pack(side="right", padx=(5, 0))
+        self.check_button = ttk.Button(header_actions, text="System Check", command=self._check_setup, bootstyle="secondary")
+        self.check_button.pack(side="right")
 
-        controls = ttk.Labelframe(outer, text="Scan configuration", padding=12)
-        controls.pack(fill="x")
+        controls = ttk.Frame(outer, padding=(16, 14), style="Panel.TFrame")
+        controls.pack(fill="x", pady=(0, 12))
         controls.columnconfigure(1, weight=1)
-        self._folder_row(controls, 0, "Input folder", self.input_var, self._choose_input)
-        self._folder_row(controls, 1, "Output folder", self.output_var, self._choose_output)
-        options = ttk.Frame(controls)
-        options.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(10, 0))
-        ttk.Label(options, text="Device").pack(side="left")
+        ttk.Label(controls, text="SCAN CONFIGURATION", font=FONTS["section"], style="PanelMuted.TLabel").grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        self._folder_row(controls, 1, "Input folder", self.input_var, self._choose_input)
+        self._folder_row(controls, 2, "Output folder", self.output_var, self._choose_output)
+        ttk.Separator(controls).grid(row=3, column=0, columnspan=3, sticky="ew", pady=(11, 10))
+        options = ttk.Frame(controls, style="Panel.TFrame")
+        options.grid(row=4, column=0, columnspan=3, sticky="ew")
+        ttk.Label(options, text="Device", style="Panel.TLabel").pack(side="left")
         device = ttk.Combobox(options, textvariable=self.device_var, values=list(self.DEVICE_VALUES), state="readonly", width=12)
-        device.pack(side="left", padx=(8, 24)); self.configuration_controls.append((device, "readonly"))
+        device.pack(side="left", padx=(8, 28)); self.configuration_controls.append((device, "readonly"))
         ttk.ToolTip(device, text="Auto prefers CUDA. GPU requires CUDA. CPU forces CPU inference.")
-        ttk.Label(options, text="Sampling strategy").pack(side="left")
+        ttk.Label(options, text="Sampling", style="Panel.TLabel").pack(side="left")
         strategy = ttk.Combobox(options, textvariable=self.strategy_var, values=list(self.STRATEGY_VALUES), state="readonly", width=12)
         strategy.pack(side="left", padx=(8, 24)); self.configuration_controls.append((strategy, "readonly"))
         ttk.ToolTip(strategy, text="Hybrid mixes timeline and motion frames; Uniform covers time; Motion prioritises change.")
-        ttk.Label(options, text="Maximum frames").pack(side="left")
+        ttk.Label(options, text="Maximum frames", style="Panel.TLabel").pack(side="left")
         maximum = ttk.Spinbox(options, from_=1, to=100, textvariable=self.max_frames_var, width=8)
         maximum.pack(side="left", padx=(8, 0)); self.configuration_controls.append((maximum, "normal"))
         ttk.ToolTip(maximum, text="Maximum number of frames Gemma may inspect per video.")
 
-        actions = ttk.Frame(outer)
-        actions.pack(fill="x", pady=10)
-        self.start_button = ttk.Button(actions, text="Start Scan", command=self._start_scan, bootstyle="success")
+        actions = ttk.Frame(outer, style="App.TFrame")
+        actions.pack(fill="x", pady=(0, 12))
+        self.start_button = ttk.Button(actions, text="Start Scan", command=self._start_scan, bootstyle="success", padding=(22, 8))
         self.start_button.pack(side="left")
-        self.cancel_button = ttk.Button(actions, text="Cancel", command=self._cancel_scan, state="disabled", bootstyle="secondary")
-        self.cancel_button.pack(side="left", padx=8)
-        ttk.Button(actions, text="Open Results Folder", command=self._open_results, bootstyle="secondary").pack(side="right")
+        self.cancel_button = ttk.Button(actions, text="Cancel", command=self._cancel_scan, state="disabled", bootstyle="outline-secondary", padding=(16, 8))
+        self.cancel_button.pack(side="left", padx=(8, 0))
+        ttk.Button(actions, text="Open Results Folder", command=self._open_results, bootstyle="outline-secondary", padding=(14, 8)).pack(side="right")
 
-        progress = ttk.Frame(outer)
-        progress.pack(fill="x", pady=(0, 10))
-        ttk.Label(progress, textvariable=self.filename_var, font=("Segoe UI", 10, "bold")).pack(anchor="w")
-        ttk.Label(progress, textvariable=self.operation_var).pack(anchor="w", pady=(1, 5))
-        ttk.Progressbar(progress, variable=self.progress_var, maximum=100, bootstyle="success-striped").pack(fill="x")
+        progress = ttk.Frame(outer, padding=(14, 10), style="Panel.TFrame")
+        progress.pack(fill="x", pady=(0, 12))
+        progress_heading = ttk.Frame(progress, style="Panel.TFrame")
+        progress_heading.pack(fill="x")
+        ttk.Label(progress_heading, textvariable=self.filename_var, font=FONTS["section"], style="Panel.TLabel").pack(side="left")
+        ttk.Label(progress_heading, textvariable=self.progress_detail_var, font=FONTS["section"], style="Accent.TLabel").pack(side="right")
+        ttk.Label(progress, textvariable=self.operation_var, style="PanelMuted.TLabel").pack(anchor="w", pady=(2, 7))
+        ttk.Progressbar(progress, variable=self.progress_var, maximum=100, bootstyle="success").pack(fill="x")
 
-        summaries = ttk.Frame(outer)
-        summaries.pack(fill="x", pady=(0, 10))
-        for name, style in (("Person Detected", "success"), ("Needs Review", "warning"), ("No Person Detected", "secondary")):
-            box = ttk.Labelframe(summaries, padding=(8, 7))
-            box.pack(side="left", fill="x", expand=True, padx=(0, 8))
-            accent = ttk.Frame(box, width=4, bootstyle=style)
-            accent.pack(side="left", fill="y", padx=(0, 9))
-            ttk.Label(box, text=name).pack(side="left")
-            ttk.Label(box, textvariable=self.summary_vars[name], font=("Segoe UI", 13, "bold"), bootstyle=style).pack(side="right")
+        summaries = ttk.Frame(outer, style="App.TFrame")
+        summaries.pack(fill="x", pady=(0, 12))
+        for index, (name, colour) in enumerate((("Person Detected", COLORS["teal"]), ("Needs Review", COLORS["amber"]), ("No Person Detected", COLORS["neutral"]))):
+            box = ttk.Frame(summaries, padding=(14, 9), style="Raised.TFrame")
+            box.pack(side="left", fill="x", expand=True, padx=(0, 8) if index < 2 else 0)
+            ttk.Frame(box, width=3, style="AccentBar.TFrame" if index == 0 else ("AmberBar.TFrame" if index == 1 else "NeutralBar.TFrame")).pack(side="left", fill="y", padx=(0, 12))
+            ttk.Label(box, textvariable=self.summary_vars[name], font=FONTS["count"], foreground=colour, style="Raised.TLabel").pack(side="left")
+            ttk.Label(box, text=name.upper(), font=FONTS["small"], style="RaisedMuted.TLabel").pack(side="left", padx=(10, 0))
 
-        filters = ttk.Frame(outer)
+        filters = ttk.Frame(outer, style="App.TFrame")
         filters.pack(fill="x", pady=(0, 8))
         ttk.Label(filters, text="Show:", font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 6))
         self.filter_buttons = {}
@@ -157,10 +190,12 @@ class ClipSiftApp:
 
         content = ttk.Panedwindow(outer, orient="horizontal")
         content.pack(fill="both", expand=True)
-        results_box = ttk.Labelframe(content, text="Scan results", padding=8)
-        preview_box = ttk.Labelframe(content, text="Evidence preview", padding=10)
-        content.add(results_box, weight=7)
-        content.add(preview_box, weight=3)
+        results_box = ttk.Frame(content, padding=(12, 10), style="Panel.TFrame")
+        preview_box = ttk.Frame(content, padding=(12, 10), style="Panel.TFrame")
+        content.add(results_box, weight=66)
+        content.add(preview_box, weight=34)
+        ttk.Label(results_box, text="SCAN RESULTS", font=FONTS["section"], style="PanelMuted.TLabel").pack(anchor="w", pady=(0, 8))
+        ttk.Label(preview_box, text="EVIDENCE PREVIEW", font=FONTS["section"], style="PanelMuted.TLabel").pack(anchor="w", pady=(0, 8))
 
         columns = ("filename", "classification", "timestamp", "confidence", "frames", "elapsed")
         self.results = ttk.Treeview(results_box, columns=columns, show="headings", height=10, selectmode="browse")
@@ -169,19 +204,23 @@ class ClipSiftApp:
         for column, heading, width in zip(columns, headings, widths):
             self.results.heading(column, text=heading)
             self.results.column(column, width=width, minwidth=55, anchor="w")
-        self.results.tag_configure("person", foreground="#64d8bd")
-        self.results.tag_configure("review", foreground="#f0bd62")
-        self.results.tag_configure("clear", foreground="#a7adb3")
-        self.results.tag_configure("error", foreground="#ff7979")
+        self.results.tag_configure("person", foreground=COLORS["teal"])
+        self.results.tag_configure("review", foreground=COLORS["amber"])
+        self.results.tag_configure("clear", foreground=COLORS["neutral"])
+        self.results.tag_configure("error", foreground=COLORS["danger"])
+        self.results.tag_configure("even", background=COLORS["panel"])
+        self.results.tag_configure("odd", background=COLORS["row_alt"])
         self.results.bind("<<TreeviewSelect>>", self._result_selected)
         scrollbar = ttk.Scrollbar(results_box, orient="vertical", command=self.results.yview)
         self.results.configure(yscrollcommand=scrollbar.set)
         self.results.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        self.preview_label = ttk.Label(preview_box, text="Select a result to view evidence", anchor="center", justify="center")
-        self.preview_label.pack(fill="both", expand=True, pady=(8, 12))
-        preview_actions = ttk.Frame(preview_box)
+        preview_frame = ttk.Frame(preview_box, padding=1, style="Evidence.TFrame")
+        preview_frame.pack(fill="both", expand=True, pady=(0, 10))
+        self.preview_label = ttk.Label(preview_frame, text="Select a result to view evidence", anchor="center", justify="center", style="Preview.TLabel")
+        self.preview_label.pack(fill="both", expand=True, padx=1, pady=1)
+        preview_actions = ttk.Frame(preview_box, style="Panel.TFrame")
         preview_actions.pack(fill="x")
         self.open_evidence_button = ttk.Button(preview_actions, text="Open Evidence", command=self._open_evidence, state="disabled", bootstyle="outline-success")
         self.open_evidence_button.pack(side="left", expand=True, fill="x", padx=(0, 4))
@@ -190,17 +229,40 @@ class ClipSiftApp:
 
         self.log_toggle = ttk.Button(outer, text="Show activity log", command=self._toggle_log, bootstyle="link")
         self.log_toggle.pack(anchor="w", pady=(8, 0))
-        self.log_box = ttk.Frame(outer)
-        self.log = scrolledtext.ScrolledText(self.log_box, height=6, wrap="word", state="disabled", bg="#171a1d", fg="#d7e0d9", insertbackground="white", relief="flat")
+        self.log_box = ttk.Frame(outer, padding=8, style="Panel.TFrame")
+        self.log = scrolledtext.ScrolledText(self.log_box, height=6, wrap="word", state="disabled", bg=COLORS["background"], fg=COLORS["muted"], insertbackground=COLORS["text"], relief="flat", font=FONTS["small"])
         self.log.pack(fill="x")
-        ttk.Label(outer, text="Video is processed locally and original footage is never modified.", font=("Segoe UI", 9), bootstyle="secondary").pack(anchor="w", pady=(7, 0))
+        ttk.Label(outer, text="LOCAL PROCESSING  ·  Original footage is never modified", font=FONTS["small"], style="Muted.TLabel").pack(anchor="w", pady=(7, 0))
+
+    def _configure_styles(self) -> None:
+        style = self.root.style
+        self.root.configure(background=COLORS["background"])
+        style.configure("App.TFrame", background=COLORS["background"])
+        style.configure("Panel.TFrame", background=COLORS["panel"])
+        style.configure("Raised.TFrame", background=COLORS["raised"])
+        style.configure("Evidence.TFrame", background=COLORS["border"], bordercolor=COLORS["border"])
+        style.configure("AccentBar.TFrame", background=COLORS["teal"])
+        style.configure("AmberBar.TFrame", background=COLORS["amber"])
+        style.configure("NeutralBar.TFrame", background=COLORS["neutral"])
+        style.configure("App.TLabel", background=COLORS["background"], foreground=COLORS["text"])
+        style.configure("Muted.TLabel", background=COLORS["background"], foreground=COLORS["muted"])
+        style.configure("Panel.TLabel", background=COLORS["panel"], foreground=COLORS["text"])
+        style.configure("PanelMuted.TLabel", background=COLORS["panel"], foreground=COLORS["muted"])
+        style.configure("Raised.TLabel", background=COLORS["raised"], foreground=COLORS["text"])
+        style.configure("RaisedMuted.TLabel", background=COLORS["raised"], foreground=COLORS["muted"])
+        style.configure("Accent.TLabel", background=COLORS["panel"], foreground=COLORS["teal"])
+        style.configure("Preview.TLabel", background=COLORS["raised"], foreground=COLORS["muted"], padding=12)
+        style.configure("Treeview", background=COLORS["panel"], fieldbackground=COLORS["panel"], foreground=COLORS["text"], rowheight=30, borderwidth=0)
+        style.configure("Treeview.Heading", background=COLORS["raised"], foreground=COLORS["text"], font=FONTS["section"], padding=(8, 8), relief="flat")
+        style.map("Treeview", background=[("selected", COLORS["teal_dark"])], foreground=[("selected", "#ffffff")])
+        style.map("Treeview.Heading", background=[("active", COLORS["border"])])
 
     def _folder_row(self, parent, row: int, label: str, variable, command) -> None:
-        ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=4)
+        ttk.Label(parent, text=label, style="Panel.TLabel").grid(row=row, column=0, sticky="w", padx=(0, 12), pady=5)
         entry = ttk.Entry(parent, textvariable=variable)
-        entry.grid(row=row, column=1, sticky="ew", pady=4)
-        browse = ttk.Button(parent, text="Browse…", command=command, bootstyle="secondary")
-        browse.grid(row=row, column=2, padx=(10, 0), pady=4)
+        entry.grid(row=row, column=1, sticky="ew", pady=5, ipady=4)
+        browse = ttk.Button(parent, text="Browse…", command=command, bootstyle="outline-success", padding=(13, 6))
+        browse.grid(row=row, column=2, padx=(10, 0), pady=5)
         self.configuration_controls.extend(((entry, "normal"), (browse, "normal")))
 
     def _choose_input(self) -> None:
@@ -231,6 +293,7 @@ class ClipSiftApp:
         self.all_results.clear()
         self._apply_filter()
         self.progress_var.set(0)
+        self.progress_detail_var.set("0%")
         self._set_scanning_controls(True)
         self.filename_var.set("Preparing scan")
         self.operation_var.set("Validating input")
@@ -328,6 +391,8 @@ class ClipSiftApp:
                 self._set_status("Scanning", "success")
         if event.total:
             self.progress_var.set(event.progress * 100)
+            position = f"  ·  Video {event.current} of {event.total}" if event.current else ""
+            self.progress_detail_var.set(f"{event.progress * 100:.0f}%{position}")
         if event.kind in {"video_completed", "video_error"} and event.result is not None:
             self.all_results.append(event.result)
             self._apply_filter()
@@ -349,7 +414,7 @@ class ClipSiftApp:
             confidence = result.trigger_confidence or "—"
             tag = "error" if row.error else {"Person Detected": "person", "Needs Review": "review", "No Person Detected": "clear"}.get(row.status, "clear")
             iid = f"result-{index}"
-            self.results.insert("", "end", iid=iid, values=(Path(row.video_path).name, "Error" if row.error else row.status, timestamp, confidence, row.frames_analysed, f"{result.elapsed_seconds:.1f}s"), tags=(tag,))
+            self.results.insert("", "end", iid=iid, values=(Path(row.video_path).name, "Error" if row.error else row.status, timestamp, confidence, row.frames_analysed, f"{result.elapsed_seconds:.1f}s"), tags=("even" if index % 2 == 0 else "odd", tag))
             self.visible_results[iid] = result
         self._update_filter_counts()
         self._clear_preview("Select a result to view evidence")
@@ -381,7 +446,7 @@ class ClipSiftApp:
         try:
             with Image.open(evidence) as source:
                 preview = source.convert("RGB")
-                preview.thumbnail((360, 260), Image.Resampling.LANCZOS)
+                preview.thumbnail((480, 360), Image.Resampling.LANCZOS)
             self.preview_photo = ImageTk.PhotoImage(preview)
             self.preview_label.configure(image=self.preview_photo, text="")
             self.open_evidence_button.configure(state="normal")
