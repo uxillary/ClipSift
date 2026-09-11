@@ -95,6 +95,12 @@ The local Windows ttkbootstrap GUI launches with `python -m clipsift.gui` or the
 
 Phase 2 adds trigger-matched evidence for Person Detected and Needs Review results, an aspect-preserving evidence preview, safe Windows open actions, non-destructive result filters, subtle textual colour coding, a collapsible activity log, scan-state indicators, and persisted preferences. Preferences are stored outside Git at `%LOCALAPPDATA%\ClipSift\settings.json`. Original recordings remain untouched; only copies of flagged/review clips and generated evidence/report files are written to the selected output folder.
 
+### Phase 3 desktop readiness
+
+Phase 3 refines the dark technical interface and adds an offline **System Check** for Python/runtime imports, PyTorch, CUDA, selected GPU, VRAM, BitsAndBytes, Hugging Face authentication, the selected Gemma checkpoint, and local model-cache presence. It never loads or downloads Gemma. A lightweight worker-thread preflight blocks scans only for genuine readiness failures such as an explicitly requested unavailable GPU, missing required runtime support, an unauthenticated and uncached model, unreadable input, or an unwritable output folder. The GUI links to fixed project/help and Gemma model pages but never requests, displays, or stores Hugging Face tokens.
+
+The privacy statement remains: **Video is processed locally and original footage is never modified.**
+
 The final implementation must use an exact Gemma checkpoint that genuinely supports image input and fits the available environment. The README must record the exact model name, model licence and runtime configuration actually tested. Do not invent these details in advance.
 
 ### NVIDIA

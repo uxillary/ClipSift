@@ -89,6 +89,11 @@ def control_states(scanning: bool) -> dict[str, str]:
     }
 
 
+def toggle_log_state(expanded: bool) -> tuple[bool, str]:
+    new_state = not expanded
+    return new_state, "Hide activity log" if new_state else "Show activity log"
+
+
 def open_local_path(path: Path | str, opener: Callable[[str], object] | None = None) -> tuple[bool, str]:
     target = Path(path)
     if not target.exists():

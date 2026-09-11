@@ -5,12 +5,14 @@ from __future__ import annotations
 import queue
 import threading
 import traceback
+import webbrowser
 from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext
 
 import ttkbootstrap as ttk
 from PIL import Image, ImageTk
 
+from clipsift import __version__
 from clipsift.gui_support import (
     GuiPreferences,
     control_states,
@@ -18,6 +20,17 @@ from clipsift.gui_support import (
     load_preferences,
     open_local_path,
     save_preferences,
+    toggle_log_state,
+)
+from clipsift.readiness import (
+    GITHUB_URL,
+    MODEL_URL,
+    README_URL,
+    DiagnosticReport,
+    PreflightResult,
+    open_external_url,
+    run_preflight,
+    run_system_check,
 )
 from clipsift.scanner import ScanConfig, ScanEvent, VideoScanResult, scan_folder
 
@@ -32,9 +45,10 @@ class ClipSiftApp:
     def __init__(self, root: ttk.Window) -> None:
         self.root = root
         self.preferences = load_preferences()
-        self.events: queue.Queue[ScanEvent | tuple[str, str]] = queue.Queue()
+        self.events: queue.Queue[ScanEvent | tuple[object, ...]] = queue.Queue()
         self.cancel_event = threading.Event()
         self.worker: threading.Thread | None = None
+        self.check_worker: threading.Thread | None = None
         self.all_results: list[VideoScanResult] = []
         self.visible_results: dict[str, VideoScanResult] = {}
         self.configuration_controls: list[tuple[object, str]] = []
@@ -64,7 +78,7 @@ class ClipSiftApp:
     def _build(self) -> None:
         self.root.title("ClipSift")
         self.root.geometry(self.preferences.window_geometry)
-        self.root.minsize(980, 680)
+        self.root.minsize(1000, 700)
         outer = ttk.Frame(self.root, padding=18)
         outer.pack(fill="both", expand=True)
 
@@ -76,6 +90,9 @@ class ClipSiftApp:
         ttk.Label(title, text="Local CCTV review aid · observations by Gemma, decisions by ClipSift", font=("Segoe UI", 10)).pack(anchor="w")
         self.status_label = ttk.Label(header, textvariable=self.status_var, padding=(12, 6), bootstyle="secondary-inverse")
         self.status_label.pack(side="right", anchor="n")
+        ttk.Button(header, text="About", command=self._show_about, bootstyle="link").pack(side="right", anchor="n", padx=4)
+        self.check_button = ttk.Button(header, text="System Check", command=self._check_setup, bootstyle="secondary")
+        self.check_button.pack(side="right", anchor="n", padx=4)
 
         controls = ttk.Labelframe(outer, text="Scan configuration", padding=12)
         controls.pack(fill="x")
@@ -87,12 +104,15 @@ class ClipSiftApp:
         ttk.Label(options, text="Device").pack(side="left")
         device = ttk.Combobox(options, textvariable=self.device_var, values=list(self.DEVICE_VALUES), state="readonly", width=12)
         device.pack(side="left", padx=(8, 24)); self.configuration_controls.append((device, "readonly"))
+        ttk.ToolTip(device, text="Auto prefers CUDA. GPU requires CUDA. CPU forces CPU inference.")
         ttk.Label(options, text="Sampling strategy").pack(side="left")
         strategy = ttk.Combobox(options, textvariable=self.strategy_var, values=list(self.STRATEGY_VALUES), state="readonly", width=12)
         strategy.pack(side="left", padx=(8, 24)); self.configuration_controls.append((strategy, "readonly"))
+        ttk.ToolTip(strategy, text="Hybrid mixes timeline and motion frames; Uniform covers time; Motion prioritises change.")
         ttk.Label(options, text="Maximum frames").pack(side="left")
         maximum = ttk.Spinbox(options, from_=1, to=100, textvariable=self.max_frames_var, width=8)
         maximum.pack(side="left", padx=(8, 0)); self.configuration_controls.append((maximum, "normal"))
+        ttk.ToolTip(maximum, text="Maximum number of frames Gemma may inspect per video.")
 
         actions = ttk.Frame(outer)
         actions.pack(fill="x", pady=10)
@@ -100,7 +120,7 @@ class ClipSiftApp:
         self.start_button.pack(side="left")
         self.cancel_button = ttk.Button(actions, text="Cancel", command=self._cancel_scan, state="disabled", bootstyle="secondary")
         self.cancel_button.pack(side="left", padx=8)
-        ttk.Button(actions, text="Open Results Folder", command=self._open_results, bootstyle="outline-success").pack(side="right")
+        ttk.Button(actions, text="Open Results Folder", command=self._open_results, bootstyle="secondary").pack(side="right")
 
         progress = ttk.Frame(outer)
         progress.pack(fill="x", pady=(0, 10))
@@ -111,8 +131,10 @@ class ClipSiftApp:
         summaries = ttk.Frame(outer)
         summaries.pack(fill="x", pady=(0, 10))
         for name, style in (("Person Detected", "success"), ("Needs Review", "warning"), ("No Person Detected", "secondary")):
-            box = ttk.Frame(summaries, padding=(10, 5), bootstyle=f"{style}-subtle")
+            box = ttk.Labelframe(summaries, padding=(8, 7))
             box.pack(side="left", fill="x", expand=True, padx=(0, 8))
+            accent = ttk.Frame(box, width=4, bootstyle=style)
+            accent.pack(side="left", fill="y", padx=(0, 9))
             ttk.Label(box, text=name).pack(side="left")
             ttk.Label(box, textvariable=self.summary_vars[name], font=("Segoe UI", 13, "bold"), bootstyle=style).pack(side="right")
 
@@ -129,8 +151,8 @@ class ClipSiftApp:
         content.pack(fill="both", expand=True)
         results_box = ttk.Labelframe(content, text="Scan results", padding=8)
         preview_box = ttk.Labelframe(content, text="Evidence preview", padding=10)
-        content.add(results_box, weight=3)
-        content.add(preview_box, weight=2)
+        content.add(results_box, weight=7)
+        content.add(preview_box, weight=3)
 
         columns = ("filename", "classification", "timestamp", "confidence", "frames", "elapsed")
         self.results = ttk.Treeview(results_box, columns=columns, show="headings", height=10, selectmode="browse")
@@ -158,17 +180,18 @@ class ClipSiftApp:
         self.open_video_button = ttk.Button(preview_actions, text="Open Video", command=self._open_video, state="disabled", bootstyle="outline-secondary")
         self.open_video_button.pack(side="left", expand=True, fill="x", padx=(4, 0))
 
-        self.log_toggle = ttk.Button(outer, text="Show activity log ▾", command=self._toggle_log, bootstyle="link")
+        self.log_toggle = ttk.Button(outer, text="Show activity log", command=self._toggle_log, bootstyle="link")
         self.log_toggle.pack(anchor="w", pady=(8, 0))
         self.log_box = ttk.Frame(outer)
         self.log = scrolledtext.ScrolledText(self.log_box, height=6, wrap="word", state="disabled", bg="#171a1d", fg="#d7e0d9", insertbackground="white", relief="flat")
         self.log.pack(fill="x")
+        ttk.Label(outer, text="Video is processed locally and original footage is never modified.", font=("Segoe UI", 9), bootstyle="secondary").pack(anchor="w", pady=(7, 0))
 
     def _folder_row(self, parent, row: int, label: str, variable, command) -> None:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 10), pady=4)
         entry = ttk.Entry(parent, textvariable=variable)
         entry.grid(row=row, column=1, sticky="ew", pady=4)
-        browse = ttk.Button(parent, text="Browse…", command=command, bootstyle="outline-secondary")
+        browse = ttk.Button(parent, text="Browse…", command=command, bootstyle="secondary")
         browse.grid(row=row, column=2, padx=(10, 0), pady=4)
         self.configuration_controls.extend(((entry, "normal"), (browse, "normal")))
 
@@ -213,14 +236,33 @@ class ClipSiftApp:
             sampling_strategy=self.STRATEGY_VALUES[self.strategy_var.get()],
             max_frames=max_frames,
         )
-        self.worker = threading.Thread(target=self._scan_worker, args=(config,), daemon=True, name="ClipSiftScan")
+        self.worker = threading.Thread(target=self._preflight_and_scan, args=(config,), daemon=True, name="ClipSiftScan")
         self.worker.start()
 
-    def _scan_worker(self, config: ScanConfig) -> None:
+    def _preflight_and_scan(self, config: ScanConfig) -> None:
         try:
+            preflight = run_preflight(config.input_folder, config.output_folder, config.device)
+            self.events.put(("preflight", preflight))
+            if not preflight.can_start:
+                return
             scan_folder(config, on_event=self.events.put, cancel_event=self.cancel_event)
         except Exception as exc:
             self.events.put(("fatal", f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"))
+
+    def _check_setup(self) -> None:
+        if self.check_worker is not None and self.check_worker.is_alive():
+            return
+        self.check_button.configure(state="disabled")
+        self._set_status("Checking Setup", "warning")
+        device = self.DEVICE_VALUES.get(self.device_var.get(), "auto")
+        self.check_worker = threading.Thread(target=self._system_check_worker, args=(device,), daemon=True, name="ClipSiftCheck")
+        self.check_worker.start()
+
+    def _system_check_worker(self, device: str) -> None:
+        try:
+            self.events.put(("system_check", run_system_check(device)))
+        except Exception as exc:
+            self.events.put(("check_error", f"System check failed: {type(exc).__name__}: {exc}"))
 
     def _cancel_scan(self) -> None:
         self.cancel_event.set()
@@ -237,11 +279,33 @@ class ClipSiftApp:
             pass
         self.root.after(100, self._poll_events)
 
-    def _handle_event(self, event: ScanEvent | tuple[str, str]) -> None:
+    def _handle_event(self, event: ScanEvent | tuple[object, ...]) -> None:
         if isinstance(event, tuple):
-            self._append_log(event[1])
-            messagebox.showerror("ClipSift scan failed", event[1].splitlines()[0])
-            self._finish_scan("Error", "danger", "Scan failed")
+            kind = str(event[0])
+            if kind == "system_check":
+                self.check_worker = None
+                self.check_button.configure(state="normal")
+                report = event[1]
+                self._set_status("Idle", "secondary")
+                self._show_system_check(report)  # type: ignore[arg-type]
+            elif kind == "check_error":
+                self.check_worker = None
+                self.check_button.configure(state="normal")
+                self._set_status("Error", "danger")
+                messagebox.showerror("ClipSift System Check", str(event[1]))
+            elif kind == "preflight":
+                preflight = event[1]
+                if isinstance(preflight, PreflightResult):
+                    self._append_log(f"Preflight: {preflight.message}")
+                    if not preflight.can_start:
+                        messagebox.showerror("ClipSift cannot start", preflight.message)
+                        self._finish_scan("Error", "danger", "Preflight check failed")
+                        self._show_system_check(preflight.report)
+            else:
+                detail = str(event[1])
+                self._append_log(detail)
+                messagebox.showerror("ClipSift scan failed", detail.splitlines()[0])
+                self._finish_scan("Error", "danger", "Scan failed")
             return
         self._append_log(f"{event.filename + ': ' if event.filename else ''}{event.message}")
         if event.filename:
@@ -348,6 +412,7 @@ class ClipSiftApp:
             widget.configure(state=state)
         self.start_button.configure(state=states["start"])
         self.cancel_button.configure(state=states["cancel"])
+        self.check_button.configure(state=states["configuration"])
 
     def _set_status(self, text: str, style: str) -> None:
         self.status_var.set(f"● {text}")
@@ -361,13 +426,12 @@ class ClipSiftApp:
         self._save_preferences()
 
     def _toggle_log(self) -> None:
-        self.log_expanded = not self.log_expanded
+        self.log_expanded, label = toggle_log_state(self.log_expanded)
         if self.log_expanded:
             self.log_box.pack(fill="x", pady=(4, 0))
-            self.log_toggle.configure(text="Hide activity log ▴")
         else:
             self.log_box.pack_forget()
-            self.log_toggle.configure(text="Show activity log ▾")
+        self.log_toggle.configure(text=label)
 
     def _append_log(self, text: str) -> None:
         if not text:
@@ -393,6 +457,53 @@ class ClipSiftApp:
             self.cancel_event.set()
         self._save_preferences()
         self.root.destroy()
+
+    def _show_system_check(self, report: DiagnosticReport) -> None:
+        dialog = ttk.Toplevel(self.root)
+        dialog.title("ClipSift System Check")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        body = ttk.Frame(dialog, padding=18)
+        body.pack(fill="both", expand=True)
+        style = {"Ready": "success", "Attention required": "warning", "Unavailable": "danger"}[report.status]
+        ttk.Label(body, text=f"Setup status: {report.status}", font=("Segoe UI", 15, "bold"), bootstyle=style).pack(anchor="w", pady=(0, 10))
+        for item in report.items:
+            row = ttk.Frame(body)
+            row.pack(fill="x", pady=2)
+            ttk.Label(row, text=item.label, width=28, font=("Segoe UI", 9, "bold")).pack(side="left", anchor="n")
+            ttk.Label(row, text=item.status, width=18, bootstyle={"Ready": "success", "Attention required": "warning", "Unavailable": "danger"}[item.status]).pack(side="left", anchor="n")
+            ttk.Label(row, text=item.detail, width=54, wraplength=380, justify="left").pack(side="left", anchor="n")
+        if not report.authenticated or not report.model_cached:
+            ttk.Separator(body).pack(fill="x", pady=10)
+            ttk.Label(body, text="Gemma setup", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+            ttk.Label(body, text="Gemma requires a Hugging Face account and accepted model terms. ClipSift never requests, displays, or stores your token. After accepting access, run:  hf auth login", wraplength=650, justify="left").pack(anchor="w", pady=(3, 8))
+            setup_actions = ttk.Frame(body)
+            setup_actions.pack(fill="x")
+            ttk.Button(setup_actions, text="Open Gemma Model Page", command=lambda: self._open_url(MODEL_URL), bootstyle="secondary").pack(side="left")
+            ttk.Button(setup_actions, text="Retry Check", command=lambda: (dialog.destroy(), self._check_setup()), bootstyle="success").pack(side="left", padx=8)
+        ttk.Button(body, text="Close", command=dialog.destroy, bootstyle="secondary").pack(anchor="e", pady=(14, 0))
+
+    def _show_about(self) -> None:
+        dialog = ttk.Toplevel(self.root)
+        dialog.title("About ClipSift")
+        dialog.transient(self.root)
+        dialog.resizable(False, False)
+        body = ttk.Frame(dialog, padding=20)
+        body.pack()
+        ttk.Label(body, text="ClipSift", font=("Segoe UI", 18, "bold"), bootstyle="success").pack(anchor="w")
+        ttk.Label(body, text=f"Version {__version__}").pack(anchor="w", pady=(0, 10))
+        ttk.Label(body, text="Video is processed locally and original footage is never modified.", wraplength=440, justify="left").pack(anchor="w", pady=(0, 12))
+        links = ttk.Frame(body)
+        links.pack(fill="x")
+        ttk.Button(links, text="GitHub", command=lambda: self._open_url(GITHUB_URL), bootstyle="link").pack(side="left")
+        ttk.Button(links, text="README / Help", command=lambda: self._open_url(README_URL), bootstyle="link").pack(side="left", padx=8)
+        ttk.Button(body, text="Close", command=dialog.destroy, bootstyle="secondary").pack(anchor="e", pady=(12, 0))
+
+    def _open_url(self, url: str) -> None:
+        ok, error = open_external_url(url, webbrowser.open)
+        if not ok:
+            messagebox.showerror("ClipSift", error)
 
 
 def main() -> None:

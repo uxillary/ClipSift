@@ -7,6 +7,7 @@ from clipsift.gui_support import (
     load_preferences,
     open_local_path,
     save_preferences,
+    toggle_log_state,
     validate_preferences,
 )
 from clipsift.reporting import ClipReportRow
@@ -28,8 +29,8 @@ def test_result_filtering_keeps_source_results() -> None:
 
 
 def test_settings_round_trip_and_validation(tmp_path: Path) -> None:
-    input_folder = tmp_path / "input"; input_folder.mkdir()
-    output_folder = tmp_path / "output"; output_folder.mkdir()
+    input_folder = tmp_path / "input videos ü"; input_folder.mkdir()
+    output_folder = tmp_path / "output results 測試"; output_folder.mkdir()
     path = tmp_path / "settings.json"
     expected = GuiPreferences(str(input_folder), str(output_folder), "GPU", "Motion", 24, "1200x850+10+20")
     save_preferences(expected, path)
@@ -47,6 +48,11 @@ def test_control_state_transitions() -> None:
     assert control_states(True) == {"configuration": "disabled", "readonly_configuration": "disabled", "start": "disabled", "cancel": "normal"}
     assert control_states(False)["configuration"] == "normal"
     assert control_states(False)["cancel"] == "disabled"
+
+
+def test_activity_log_collapsed_and_expanded_state_logic() -> None:
+    assert toggle_log_state(False) == (True, "Hide activity log")
+    assert toggle_log_state(True) == (False, "Show activity log")
 
 
 def test_safe_path_opening_checks_existence_and_uses_direct_opener(tmp_path: Path) -> None:

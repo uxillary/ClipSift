@@ -78,7 +78,7 @@ python -m clipsift.cli C:\path\to\clips --output "ClipSift Results"
 
 Original recordings are not modified. Generated review folders, evidence, private media, credentials, model caches, and weights are excluded from Git.
 
-## Windows desktop GUI — Phase 2
+## Windows desktop GUI — Phase 3
 
 The local ttkbootstrap interface wraps the same scan service used by the CLI. It keeps model loading and video analysis on a worker thread while all Tk updates are delivered to the main thread through a queue. Gemma is loaded once per scan and reused across videos; cancellation is cooperative between frames and files, and completed reports remain available.
 
@@ -97,6 +97,18 @@ Choose input/output folders, Auto/GPU/CPU, Hybrid/Uniform/Motion sampling, and t
 Selecting a result shows its evidence image without stretching it and provides direct **Open Evidence** and **Open Video** actions. Person Detected evidence comes from the first person-present frame; Needs Review evidence comes from the exact uncertain, malformed, or low-confidence frame that triggered review. No Person Detected results do not require evidence. Compact filters show person, review, clear, and error results without changing stored results, while the activity log is collapsed by default.
 
 GUI preferences are stored per user at `%LOCALAPPDATA%\ClipSift\settings.json`, outside the repository. ClipSift remembers the last valid input/output folders, device, sampling strategy, maximum frames, and window size. Missing or corrupt settings safely fall back to defaults.
+
+Use **System Check** before a first scan to review Python and PyTorch readiness, CUDA/GPU and VRAM, BitsAndBytes, Hugging Face authentication, the selected Gemma checkpoint, and whether model files appear in the local Hugging Face cache. This check is offline: it does not load or download Gemma. A lightweight worker-thread preflight repeats the essential checks before scanning and verifies that the input contains supported videos and the output folder can be created and written.
+
+Gemma requires a Hugging Face account, accepted terms on the [`google/gemma-3-4b-it` model page](https://huggingface.co/google/gemma-3-4b-it), and local authentication when the model is not already accessible from cache:
+
+```powershell
+hf auth login
+```
+
+ClipSift never asks for, displays, or stores the token. Model files downloaded by Hugging Face remain in its per-user cache; opening the GUI and running System Check do not initiate a download. The safe GPU preset requires CUDA and BitsAndBytes. If GPU is explicitly selected but CUDA is unavailable, the scan is blocked rather than silently falling back to CPU. If setup is reported unavailable, run `python -m clipsift.cli doctor`, confirm the CUDA-enabled PyTorch installation, accept the model terms, authenticate, and retry System Check.
+
+**Privacy:** Video is processed locally and original footage is never modified. ClipSift writes only generated evidence, reports, and copies of flagged/review clips to the chosen output folder.
 
 ## Tests
 
