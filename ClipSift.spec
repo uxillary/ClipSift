@@ -34,7 +34,7 @@ for package in (
     hiddenimports += collect_submodules(package)
 
 a = Analysis(
-    [str(root / "clipsift" / "gui.py")],
+    [str(root / "clipsift" / "gui_launcher.py")],
     pathex=[str(root)],
     binaries=binaries,
     datas=datas,
@@ -42,20 +42,7 @@ a = Analysis(
     hookspath=[str(root / "packaging" / "pyinstaller-hooks")],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[
-        "IPython",
-        "accelerate.commands",
-        "accelerate.test_utils",
-        "jupyter",
-        "matplotlib",
-        "pandas",
-        "pytest",
-        "scipy",
-        "tensorflow",
-        "torch.utils.tensorboard",
-        "transformers.commands",
-        "transformers.testing_utils",
-    ],
+    excludes=["IPython", "jupyter", "matplotlib", "pandas", "pytest", "scipy", "tensorflow"],
     noarchive=False,
     optimize=0,
 )

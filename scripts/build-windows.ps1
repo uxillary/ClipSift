@@ -62,10 +62,12 @@ if (-not $process.WaitForExit(180000)) {
     Stop-Process -Id $process.Id -Force
     throw "Packaged offline smoke check exceeded three minutes."
 }
-if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $smokeOutput -PathType Leaf)) {
+if (-not (Test-Path -LiteralPath $smokeOutput -PathType Leaf)) {
     throw "Packaged offline smoke check failed."
 }
 $smoke = Get-Content -Raw -LiteralPath $smokeOutput | ConvertFrom-Json
+$failure = if ($smoke.failure) { "$($smoke.failure.type): $($smoke.failure.message)" } else { "No structured failure detail was written." }
+if ($process.ExitCode -ne 0 -or $smoke.success -ne $true) { throw "Packaged offline smoke check failed: $failure" }
 $failedImports = @($smoke.imports.PSObject.Properties | Where-Object Value -ne "ok")
 if ($failedImports.Count -gt 0 -or $smoke.model_loaded -ne $false) { throw "Packaged module verification failed." }
 

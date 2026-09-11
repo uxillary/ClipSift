@@ -78,7 +78,7 @@ python -m clipsift.cli C:\path\to\clips --output "ClipSift Results"
 
 Original recordings are not modified. Generated review folders, evidence, private media, credentials, model caches, and weights are excluded from Git.
 
-## Windows desktop GUI — Phase 3
+## Windows desktop GUI — Phase 4A
 
 The local ttkbootstrap interface wraps the same scan service used by the CLI. It keeps model loading and video analysis on a worker thread while all Tk updates are delivered to the main thread through a queue. Gemma is loaded once per scan and reused across videos; cancellation is cooperative between frames and files, and completed reports remain available.
 
@@ -109,6 +109,38 @@ hf auth login
 ClipSift never asks for, displays, or stores the token. Model files downloaded by Hugging Face remain in its per-user cache; opening the GUI and running System Check do not initiate a download. The safe GPU preset requires CUDA and BitsAndBytes. If GPU is explicitly selected but CUDA is unavailable, the scan is blocked rather than silently falling back to CPU. If setup is reported unavailable, run `python -m clipsift.cli doctor`, confirm the CUDA-enabled PyTorch installation, accept the model terms, authenticate, and retry System Check.
 
 **Privacy:** Video is processed locally and original footage is never modified. ClipSift writes only generated evidence, reports, and copies of flagged/review clips to the chosen output folder.
+
+### Build the local Windows package
+
+Phase 4A uses PyInstaller **onedir** and **windowed** mode. Onedir is used because the PyTorch/CUDA and BitsAndBytes native stack is large and is more predictable to inspect and troubleshoot without onefile extraction. The resulting unsigned build may trigger a Windows SmartScreen warning. It is a local verification artifact, not a published release or installer.
+
+Activate the repository's `.venv`, install the build extra, and run the guarded PowerShell script:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[build,test]"
+.\scripts\build-windows.ps1
+```
+
+The script runs the complete tests, builds from `ClipSift.spec`, performs non-interactive packaged module/offline-diagnostic checks, creates `dist\ClipSift-0.1.0-win64.zip`, and writes its adjacent `.sha256` file. It cleans only ClipSift's explicit packaging targets.
+
+```text
+dist\
+├── ClipSift\
+│   ├── ClipSift.exe
+│   └── _internal\       # Python, UI, computer-vision and ML runtime
+├── ClipSift-0.1.0-win64.zip
+├── ClipSift-0.1.0-win64.zip.sha256
+└── packaged-smoke-check.json
+```
+
+Expect several gigabytes because CUDA-enabled PyTorch, Transformers, OpenCV, torchvision, and BitsAndBytes native components are included. Gemma weights and credentials are deliberately not included: the packaged app uses the signed-in user's normal Hugging Face authentication and cache. Accept the Gemma terms and run `hf auth login` before first uncached use.
+
+The verified Phase 4A build environment used Python 3.11.5, PyInstaller 6.16.0, PyInstaller hooks 2026.7, PyTorch 2.7.1+cu118, torchvision 0.22.1+cu118, Transformers 5.17.0, Accelerate 1.15.0, BitsAndBytes 0.50.2, OpenCV 5.0.0.93, Pillow 12.3.0, and ttkbootstrap 2.2.2. Rebuilds can vary when the runtime dependencies permitted by `pyproject.toml` resolve to newer versions.
+
+Complete the manual checks in `scripts\smoke-check-windows.md`, including visible launch/no-console behavior, icon appearance, folder pickers, settings persistence, links, and—separately—real RTX inference. Automated diagnostics do not prove packaged inference.
+
+Deleting `dist\ClipSift` removes only the packaged application folder. It does not delete Gemma files in the user's Hugging Face cache or preferences at `%LOCALAPPDATA%\ClipSift\settings.json`.
 
 ## Tests
 

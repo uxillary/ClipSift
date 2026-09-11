@@ -13,14 +13,27 @@ def test_resource_path_supports_explicit_bundle_root(tmp_path: Path) -> None:
 def test_packaged_smoke_imports_modules_without_loading_model(tmp_path: Path, monkeypatch) -> None:
     imported = []
     monkeypatch.setattr(packaged_smoke.importlib, "import_module", lambda name: imported.append(name))
-    monkeypatch.setattr(
-        packaged_smoke,
-        "run_system_check",
-        lambda device: DiagnosticReport("Ready", (), True, True),
-    )
+    import clipsift.readiness
+    monkeypatch.setattr(clipsift.readiness, "run_system_check", lambda device: DiagnosticReport("Ready", (), True, True))
     output = tmp_path / "smoke.json"
-    packaged_smoke.run_packaged_smoke_check(output)
+    assert packaged_smoke.run_packaged_smoke_check(output) == 0
     payload = json.loads(output.read_text(encoding="utf-8"))
     assert imported == list(packaged_smoke.REQUIRED_MODULES)
     assert payload["model_loaded"] is False
     assert payload["diagnostic_status"] == "Ready"
+    assert payload["success"] is True
+
+
+def test_packaged_smoke_writes_structured_failure(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        packaged_smoke.importlib,
+        "import_module",
+        lambda name: (_ for _ in ()).throw(ModuleNotFoundError(f"{Path.home()}\\secret module")) if name == "torch" else None,
+    )
+    output = tmp_path / "failure.json"
+    assert packaged_smoke.run_packaged_smoke_check(output) == 1
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["success"] is False
+    assert payload["failure"]["type"] == "RuntimeError"
+    assert str(Path.home()) not in payload["failure"]["message"]
+    assert str(Path.home()) not in payload["imports"]["torch"]

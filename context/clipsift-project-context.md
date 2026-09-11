@@ -101,6 +101,12 @@ Phase 3 refines the dark technical interface and adds an offline **System Check*
 
 The privacy statement remains: **Video is processed locally and original footage is never modified.**
 
+### Phase 4A local Windows packaging
+
+ClipSift has a reproducible PyInstaller 6.16.0 onedir/windowed build driven by `ClipSift.spec` and `scripts/build-windows.ps1`. Onedir is retained for transparent, predictable handling of the large PyTorch/CUDA, torchvision, Transformers, OpenCV, Accelerate and BitsAndBytes runtime. UPX is disabled. A build-only custom hook includes the CPU and build-matching CUDA 11.8 BitsAndBytes libraries without unrelated CUDA, ROCm or XPU backends. The application version remains authoritative in `clipsift.__version__` and supplies package and Windows executable metadata.
+
+The package contains neither Gemma weights nor Hugging Face credentials/cache, private/test videos, ClipSift tests, scan output, or preferences. It uses the user's normal Hugging Face cache/authentication and `%LOCALAPPDATA%\ClipSift\settings.json`. The build script runs source tests, a bounded non-interactive packaged import/offline-diagnostic check, ZIP creation and SHA-256 generation. Packaged diagnostics never load Gemma and therefore do not establish packaged GPU inference; that remains a manual RTX smoke check. The build is unsigned and is not an installer or public release. Deleting the application folder does not delete the separate model cache or user preferences.
+
 The final implementation must use an exact Gemma checkpoint that genuinely supports image input and fits the available environment. The README must record the exact model name, model licence and runtime configuration actually tested. Do not invent these details in advance.
 
 ### NVIDIA
