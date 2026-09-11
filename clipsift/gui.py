@@ -93,7 +93,7 @@ class ClipSiftApp:
         results_box.pack(fill="both", expand=True)
         columns = ("filename", "classification", "timestamp", "confidence", "frames", "elapsed")
         self.results = ttk.Treeview(results_box, columns=columns, show="headings", height=9)
-        headings = ("Filename", "Classification", "First relevant timestamp", "Confidence", "Frames analysed", "Elapsed time")
+        headings = ("Filename", "Classification", "Trigger timestamp", "Confidence", "Frames analysed", "Elapsed time")
         widths = (210, 145, 155, 100, 110, 100)
         for column, heading, width in zip(columns, headings, widths):
             self.results.heading(column, text=heading)
@@ -201,8 +201,8 @@ class ClipSiftApp:
         if event.kind in {"video_completed", "video_error"} and event.result is not None:
             result = event.result
             row = result.row
-            timestamp = "—" if result.first_relevant_timestamp is None else f"{result.first_relevant_timestamp:.1f}s"
-            self.results.insert("", "end", values=(Path(row.video_path).name, row.status, timestamp, result.confidence or "—", row.frames_analysed, f"{result.elapsed_seconds:.1f}s"))
+            timestamp = "—" if result.trigger_timestamp is None else f"{result.trigger_timestamp:.1f}s"
+            self.results.insert("", "end", values=(Path(row.video_path).name, row.status, timestamp, result.trigger_confidence or "—", row.frames_analysed, f"{result.elapsed_seconds:.1f}s"))
             self.counts[row.status] += 1
             self.summary_vars[row.status].set(str(self.counts[row.status]))
         if event.kind == "completed":

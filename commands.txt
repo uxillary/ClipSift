@@ -53,3 +53,12 @@ test
 
 python -m clipsift.cli test-image local_test_data\person.png --device auto --preset safe
 python -m clipsift.cli test-image local_test_data\empty.png --device auto --preset safe
+
+----
+
+test gui 
+
+git pull origin main
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e .
+python -m clipsift.gui

@@ -47,8 +47,8 @@ class ScanConfig:
 @dataclass(frozen=True)
 class VideoScanResult:
     row: ClipReportRow
-    first_relevant_timestamp: float | None
-    confidence: str
+    trigger_timestamp: float | None
+    trigger_confidence: str
     elapsed_seconds: float
 
 
@@ -93,6 +93,24 @@ def _frames_for_video(config: ScanConfig, video_path: Path) -> Iterator[SampledF
         config.motion_interval_seconds,
     )
     yield from frames_at_timestamps(video_path, selections, config.max_frame_size)
+
+
+def resolve_trigger_metadata(
+    assessments: list[FrameAssessment], status: ClipStatus
+) -> tuple[float | None, str]:
+    """Return GUI timestamp/confidence according to the clip classification."""
+    if status == ClipStatus.PERSON_DETECTED:
+        trigger = next((item for item in assessments if item.person_status == "present"), None)
+        return (trigger.timestamp_seconds, trigger.confidence) if trigger else (None, "")
+
+    if status == ClipStatus.NEEDS_REVIEW:
+        trigger = next((item for item in assessments if item.review_required), None)
+        return (trigger.timestamp_seconds, trigger.confidence) if trigger else (None, "")
+
+    confidence_rank = {"low": 0, "medium": 1, "high": 2}
+    absent = [item for item in assessments if item.person_status == "absent" and item.parse_error is None]
+    strongest_absent = max(absent, key=lambda item: confidence_rank.get(item.confidence, -1), default=None)
+    return None, strongest_absent.confidence if strongest_absent else ""
 
 
 def scan_folder(
@@ -169,11 +187,8 @@ def scan_folder(
                 elif decision.status == ClipStatus.NEEDS_REVIEW:
                     shutil.copy2(video_path, output_paths["needs_review"] / video_path.name)
                 row = row_from_decision(video_path, duration, decision, evidence_path)
-                first_relevant = next((item.timestamp_seconds for item in assessments if item.review_required), None)
-                confidence = decision.strongest_frame.confidence if decision.strongest_frame else (
-                    assessments[0].confidence if assessments else ""
-                )
-                result = VideoScanResult(row, first_relevant, confidence, time.perf_counter() - video_started)
+                trigger_timestamp, trigger_confidence = resolve_trigger_metadata(assessments, decision.status)
+                result = VideoScanResult(row, trigger_timestamp, trigger_confidence, time.perf_counter() - video_started)
                 rows.append(row)
                 source_seconds += duration
                 write_report_csv(config.output_folder / "report.csv", rows)

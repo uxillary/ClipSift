@@ -5,8 +5,9 @@ from types import SimpleNamespace
 import numpy as np
 
 import clipsift.scanner as scanner
+from clipsift.classification import ClipStatus, parse_model_response
 from clipsift.inference import InferenceResult
-from clipsift.scanner import ScanConfig, scan_folder
+from clipsift.scanner import ScanConfig, resolve_trigger_metadata, scan_folder
 from clipsift.video import SampledFrame, VideoMetadata
 
 
@@ -116,3 +117,36 @@ def test_cancellation_preserves_completed_result(monkeypatch, tmp_path: Path) ->
     assert len(summary.rows) == 1
     assert (tmp_path / "output" / "report.csv").is_file()
     assert events[-1].kind == "cancelled"
+
+
+def test_person_trigger_uses_first_present_frame_not_earlier_review() -> None:
+    assessments = [
+        parse_model_response('{"person_status":"uncertain","assessment_confidence":"low","description":"Possible"}', 0.0),
+        parse_model_response('{"person_status":"present","assessment_confidence":"medium","description":"Person"}', 35.0),
+    ]
+    assert resolve_trigger_metadata(assessments, ClipStatus.PERSON_DETECTED) == (35.0, "medium")
+
+
+def test_needs_review_timestamp_and_confidence_share_uncertain_trigger() -> None:
+    assessments = [
+        parse_model_response('{"person_status":"absent","assessment_confidence":"high","description":"Empty"}', 0.0),
+        parse_model_response('{"person_status":"uncertain","assessment_confidence":"low","description":"Possible"}', 12.5),
+    ]
+    assert resolve_trigger_metadata(assessments, ClipStatus.NEEDS_REVIEW) == (12.5, "low")
+
+
+def test_no_person_has_no_trigger_and_strongest_absent_confidence() -> None:
+    assessments = [
+        parse_model_response('{"person_status":"absent","assessment_confidence":"medium","description":"Empty"}', 0.0),
+        parse_model_response('{"person_status":"absent","assessment_confidence":"high","description":"Clear empty scene"}', 12.5),
+    ]
+    assert resolve_trigger_metadata(assessments, ClipStatus.NO_PERSON_DETECTED) == (None, "high")
+
+
+def test_malformed_response_is_trigger_with_its_own_confidence() -> None:
+    assessments = [
+        parse_model_response('{"person_status":"absent","assessment_confidence":"high","description":"Empty"}', 0.0),
+        parse_model_response("not valid JSON", 8.0),
+    ]
+    timestamp, confidence = resolve_trigger_metadata(assessments, ClipStatus.NEEDS_REVIEW)
+    assert (timestamp, confidence) == (8.0, "low")
