@@ -8,6 +8,13 @@ __pycache__/
 venv/
 env/
 
+# Local PyInstaller outputs (configuration and branding remain tracked)
+build/ClipSift/
+dist/ClipSift/
+dist/ClipSift-*.zip
+dist/ClipSift-*.zip.sha256
+dist/packaged-smoke-check.json
+
 # Private footage and generated review outputs
 sample_data/*
 !sample_data/.gitkeep

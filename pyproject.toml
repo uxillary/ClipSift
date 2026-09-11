@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "clipsift"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Privacy-conscious local CCTV review assistant"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,6 +20,7 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["pytest>=8.3.0"]
+build = ["pyinstaller==6.16.0"]
 
 [project.scripts]
 clipsift = "clipsift.cli:main"
@@ -27,6 +28,9 @@ clipsift-gui = "clipsift.gui:main"
 
 [tool.setuptools.packages.find]
 include = ["clipsift*"]
+
+[tool.setuptools.dynamic]
+version = {attr = "clipsift.__version__"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

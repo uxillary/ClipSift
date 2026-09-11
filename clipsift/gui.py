@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import queue
+import sys
 import threading
 import traceback
 import webbrowser
@@ -32,6 +33,7 @@ from clipsift.readiness import (
     run_preflight,
     run_system_check,
 )
+from clipsift.resources import resource_path
 from clipsift.scanner import ScanConfig, ScanEvent, VideoScanResult, scan_folder
 
 
@@ -44,6 +46,12 @@ class ClipSiftApp:
 
     def __init__(self, root: ttk.Window) -> None:
         self.root = root
+        icon_path = resource_path("assets/clipsift.ico")
+        if icon_path.is_file():
+            try:
+                self.root.iconbitmap(default=str(icon_path))
+            except Exception:
+                pass
         self.preferences = load_preferences()
         self.events: queue.Queue[ScanEvent | tuple[object, ...]] = queue.Queue()
         self.cancel_event = threading.Event()
@@ -507,6 +515,11 @@ class ClipSiftApp:
 
 
 def main() -> None:
+    if len(sys.argv) == 3 and sys.argv[1] == "--packaged-smoke-check":
+        from clipsift.packaged_smoke import run_packaged_smoke_check
+
+        run_packaged_smoke_check(Path(sys.argv[2]))
+        return
     root = ttk.Window(themename="darkly")
     ClipSiftApp(root)
     root.mainloop()
