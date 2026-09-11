@@ -95,17 +95,26 @@ def _frames_for_video(config: ScanConfig, video_path: Path) -> Iterator[SampledF
     yield from frames_at_timestamps(video_path, selections, config.max_frame_size)
 
 
+def resolve_trigger_assessment(
+    assessments: list[FrameAssessment], status: ClipStatus
+) -> FrameAssessment | None:
+    """Return the assessment responsible for evidence and GUI trigger details."""
+    if status == ClipStatus.PERSON_DETECTED:
+        return next((item for item in assessments if item.person_status == "present"), None)
+
+    if status == ClipStatus.NEEDS_REVIEW:
+        return next((item for item in assessments if item.review_required), None)
+
+    return None
+
+
 def resolve_trigger_metadata(
     assessments: list[FrameAssessment], status: ClipStatus
 ) -> tuple[float | None, str]:
     """Return GUI timestamp/confidence according to the clip classification."""
-    if status == ClipStatus.PERSON_DETECTED:
-        trigger = next((item for item in assessments if item.person_status == "present"), None)
-        return (trigger.timestamp_seconds, trigger.confidence) if trigger else (None, "")
-
-    if status == ClipStatus.NEEDS_REVIEW:
-        trigger = next((item for item in assessments if item.review_required), None)
-        return (trigger.timestamp_seconds, trigger.confidence) if trigger else (None, "")
+    trigger = resolve_trigger_assessment(assessments, status)
+    if trigger is not None:
+        return trigger.timestamp_seconds, trigger.confidence
 
     confidence_rank = {"low": 0, "medium": 1, "high": 2}
     absent = [item for item in assessments if item.person_status == "absent" and item.parse_error is None]
@@ -178,10 +187,11 @@ def scan_folder(
                 if cancel.is_set() and not assessments:
                     break
                 decision = decide_clip(assessments)
+                trigger_assessment = resolve_trigger_assessment(assessments, decision.status)
                 evidence_path = None
-                if decision.strongest_frame is not None:
-                    evidence_path = output_paths["evidence"] / f"{video_path.stem}_{decision.strongest_frame.timestamp_seconds:.1f}s.jpg"
-                    save_frame(evidence_path, frame_lookup[decision.strongest_frame.timestamp_seconds])
+                if trigger_assessment is not None:
+                    evidence_path = output_paths["evidence"] / f"{video_path.stem}_{trigger_assessment.timestamp_seconds:.1f}s.jpg"
+                    save_frame(evidence_path, frame_lookup[trigger_assessment.timestamp_seconds])
                 if decision.status == ClipStatus.PERSON_DETECTED:
                     shutil.copy2(video_path, output_paths["flagged"] / video_path.name)
                 elif decision.status == ClipStatus.NEEDS_REVIEW:

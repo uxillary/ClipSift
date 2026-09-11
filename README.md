@@ -78,7 +78,7 @@ python -m clipsift.cli C:\path\to\clips --output "ClipSift Results"
 
 Original recordings are not modified. Generated review folders, evidence, private media, credentials, model caches, and weights are excluded from Git.
 
-## Windows desktop GUI — Phase 1
+## Windows desktop GUI — Phase 2
 
 The local ttkbootstrap interface wraps the same scan service used by the CLI. It keeps model loading and video analysis on a worker thread while all Tk updates are delivered to the main thread through a queue. Gemma is loaded once per scan and reused across videos; cancellation is cooperative between frames and files, and completed reports remain available.
 
@@ -93,6 +93,10 @@ clipsift-gui
 ```
 
 Choose input/output folders, Auto/GPU/CPU, Hybrid/Uniform/Motion sampling, and the maximum number of frames. The results table and activity log are automated-review aids; Gemma supplies observations while ClipSift's deterministic policy supplies classifications. Original videos are never modified or deleted.
+
+Selecting a result shows its evidence image without stretching it and provides direct **Open Evidence** and **Open Video** actions. Person Detected evidence comes from the first person-present frame; Needs Review evidence comes from the exact uncertain, malformed, or low-confidence frame that triggered review. No Person Detected results do not require evidence. Compact filters show person, review, clear, and error results without changing stored results, while the activity log is collapsed by default.
+
+GUI preferences are stored per user at `%LOCALAPPDATA%\ClipSift\settings.json`, outside the repository. ClipSift remembers the last valid input/output folders, device, sampling strategy, maximum frames, and window size. Missing or corrupt settings safely fall back to defaults.
 
 ## Tests
 

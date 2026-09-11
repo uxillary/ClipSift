@@ -89,9 +89,11 @@ An initial controlled two-image smoke test completed on an RTX 3060 Laptop GPU u
 
 These are initial controlled smoke-test results, not a general accuracy benchmark. The single-video smoke-test command loads Gemma once and reuses it across up to 12 selected frames by default. Hybrid selection combines full-timeline coverage with spaced high-motion candidates from a lightweight OpenCV pass. Motion only prioritises frames and is never considered person detection; Gemma makes the visual observation and ClipSift code makes the review decision.
 
-### Phase 1 desktop interface
+### Phase 2 desktop interface
 
 The local Windows ttkbootstrap GUI launches with `python -m clipsift.gui` or the installed `clipsift-gui` entry point. It uses a worker thread for the shared folder-scan service and a thread-safe event queue for main-thread Tk updates. One Gemma instance is reused across all videos in a scan. Cooperative cancellation preserves completed rows and reports. GUI packaging as an executable remains a later stage.
+
+Phase 2 adds trigger-matched evidence for Person Detected and Needs Review results, an aspect-preserving evidence preview, safe Windows open actions, non-destructive result filters, subtle textual colour coding, a collapsible activity log, scan-state indicators, and persisted preferences. Preferences are stored outside Git at `%LOCALAPPDATA%\ClipSift\settings.json`. Original recordings remain untouched; only copies of flagged/review clips and generated evidence/report files are written to the selected output folder.
 
 The final implementation must use an exact Gemma checkpoint that genuinely supports image input and fits the available environment. The README must record the exact model name, model licence and runtime configuration actually tested. Do not invent these details in advance.
 

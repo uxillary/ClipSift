@@ -7,7 +7,7 @@ import numpy as np
 import clipsift.scanner as scanner
 from clipsift.classification import ClipStatus, parse_model_response
 from clipsift.inference import InferenceResult
-from clipsift.scanner import ScanConfig, resolve_trigger_metadata, scan_folder
+from clipsift.scanner import ScanConfig, resolve_trigger_assessment, resolve_trigger_metadata, scan_folder
 from clipsift.video import SampledFrame, VideoMetadata
 
 
@@ -150,3 +150,33 @@ def test_malformed_response_is_trigger_with_its_own_confidence() -> None:
     ]
     timestamp, confidence = resolve_trigger_metadata(assessments, ClipStatus.NEEDS_REVIEW)
     assert (timestamp, confidence) == (8.0, "low")
+
+
+def test_needs_review_saves_trigger_evidence_at_matching_timestamp(monkeypatch, tmp_path: Path) -> None:
+    input_folder = _files(tmp_path, count=1)
+    FakeModel.loads = 0
+    FakeModel.responses = [
+        '{"person_status":"absent","assessment_confidence":"high","description":"Empty"}',
+        '{"person_status":"uncertain","assessment_confidence":"low","description":"Possible"}',
+    ]
+
+    def frames(path, *args):
+        yield SampledFrame(np.zeros((2, 2, 3), dtype=np.uint8), 0.0, 0)
+        yield SampledFrame(np.ones((2, 2, 3), dtype=np.uint8), 12.5, 125)
+
+    monkeypatch.setattr(scanner, "read_metadata", _metadata)
+    monkeypatch.setattr(scanner, "sample_frames", frames)
+    monkeypatch.setattr(scanner, "save_frame", lambda path, frame: path.write_bytes(bytes([int(frame[0, 0, 0])])))
+    events = []
+    scan_folder(ScanConfig(input_folder, tmp_path / "output", sampling_strategy=None), events.append, model_factory=FakeModel)
+
+    result = next(event.result for event in events if event.kind == "video_completed")
+    assert result.trigger_timestamp == 12.5
+    assert result.trigger_confidence == "low"
+    assert Path(result.row.evidence_frame).name.endswith("_12.5s.jpg")
+    assert Path(result.row.evidence_frame).read_bytes() == b"\x01"
+
+
+def test_no_person_has_no_trigger_evidence_assessment() -> None:
+    assessments = [parse_model_response('{"person_status":"absent","assessment_confidence":"high","description":"Empty"}', 0.0)]
+    assert resolve_trigger_assessment(assessments, ClipStatus.NO_PERSON_DETECTED) is None
