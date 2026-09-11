@@ -2,13 +2,22 @@
 
 ## Project status
 
-- **Status:** In progress / early MVP
+- **Status:** v0.1.0 Alpha public pre-release preparation
 - **Created for:** Google Cloud × NVIDIA GTC Berlin 2026 Golden Ticket challenge
 - **Submission deadline:** 10 September 2026
 - **Owner:** Adam Johnston
 - **Primary development platform:** Windows 11
 - **Primary desktop GPU:** NVIDIA GeForce RTX 3070 Ti
 - **Additional development hardware:** Windows laptops with differing NVIDIA GPUs and VRAM capacities
+
+## v0.1.0 Alpha release milestone
+
+- **Milestone:** Prepare the repository and supporting documentation for the first public GitHub pre-release, `v0.1.0 Alpha`.
+- **Packaging status:** A PyInstaller onedir/windowed build pipeline and a prior local package exist. A final branded rebuild, real packaged-EXE inference test, and basic clean-machine test are still required; the current artifacts must not be treated as the public release.
+- **Branding status:** Branded application icons, header/watermark assets, and GUI controls are present. The final branded package and release screenshots still need to be produced and verified.
+- **Distribution approach:** Publish an unsigned portable Windows ZIP through external storage because of its size, link it from a GitHub pre-release, and publish a verified SHA-256. Gemma weights and credentials remain separate and are never redistributed with ClipSift.
+- **Release blockers:** Complete the final rebuild and tests, upload the ZIP, record the final checksum, replace URL/hash placeholders, tag `v0.1.0`, publish the GitHub pre-release, and verify the public download/setup journey.
+- **Future website:** A later GitHub Pages site will provide the product overview, setup/model guidance, privacy and limitation disclosures, screenshots, demo, FAQ, troubleshooting, and release/download links. Its plan is in `docs/github-pages-plan.md`; no website is being built for this milestone.
 
 ## One-sentence summary
 
