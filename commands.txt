@@ -1,5 +1,5 @@
 
-cd C:\Users\trigg\Documents\GitHub\clipsift
+cd C:\path\to\ClipSift
 py -0p
 python --version
 nvidia-smi

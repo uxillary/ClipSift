@@ -7,7 +7,15 @@ name = "clipsift"
 dynamic = ["version"]
 description = "Privacy-conscious local CCTV review assistant"
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows :: Windows 10",
+  "Operating System :: Microsoft :: Windows :: Windows 11",
+  "Programming Language :: Python :: 3.11",
+]
 dependencies = [
   "accelerate>=0.34.0",
   "bitsandbytes>=0.43.3",

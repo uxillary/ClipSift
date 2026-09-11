@@ -2,6 +2,8 @@
 
 ClipSift is a privacy-conscious local CCTV review assistant. It asks Gemma 3 whether an image is likely to contain a person and flags results for human review. It is not proof, does not identify people, and never uploads media.
 
+> **v0.1.0-alpha source release candidate:** Windows 10/11 64-bit is supported and an NVIDIA GPU is recommended. Allow approximately 20 GB of free space for the Python environment, separately cached Gemma model, and generated results. See [RELEASE_NOTES.md](RELEASE_NOTES.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Windows setup
 
 Use Python 3.11 and install the CUDA-enabled PyTorch build separately so it matches your NVIDIA driver. Get the current command from the [official PyTorch selector](https://pytorch.org/get-started/locally/); do not rely on the generic dependency install to replace a working CUDA build.
