@@ -62,3 +62,20 @@ git pull origin main
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e .
 python -m clipsift.gui
+
+----
+
+Final rebuild
+
+First, close any running ClipSift GUI/EXE. Then open PowerShell in your local ClipSift repository and run:
+
+cd C:\Users\trigg\Documents\GitHub\ClipSift
+git status --short
+If that displays nothing
+
+Your working tree is clean. Continue:
+
+git pull --ff-only
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[test,build]"
+.\scripts\build-windows.ps1
